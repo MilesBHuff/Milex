@@ -49,25 +49,31 @@ zpool create \
     -O sync=standard \
     -O logbias=latency \
     \
+    -O normalization=formD \
+    -O casesensitivity=sensitive \
+    \
     -O atime=off \
     \
     -O xattr=sa \
-    -O zilsaxattr=on \
     -O acltype=posixacl \
     -O aclinherit=passthrough \
     -O aclmode=passthrough \
     \
-    -O redundant_metadata=most \
-    \
+    -O dnodesize=auto \
     -O vdev_zaps_v2=on \
+    -O redundant_metadata=most \
     \
     -O checksum=blake3 \
     \
-    -O encryption=on \
+    -O encryption=aes-256-gcm \
     -O keyformat=passphrase \
     -O keylocation=prompt \
     \
     -O compression=zstd:3 \
+    -O autotrim=on \
+    \
+    -O canmount=off \
+    -O mountpoint=none \
     \
     "$ENV_POOL_NAME" \
     mirror $1 \
