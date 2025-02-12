@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 function helptext {
-    echo 'Usage: format-data-mirror.bash device0 device1 [device2 ...]'
+    echo "Usage: format-data-mirror.bash 'device0 [device1 ...]' 'device0 [device1 ...]' 'device0 [device1 ...]'"
     echo
-    echo 'Please pass as arguments all the block devices you wish to include in the main data pool.'
-    echo 'The provided block devices will be made into ZFS mirrors of each other.'
+    echo 'The first argument is a space-delimited list of block devices to use for the main storage pool.'
+    echo 'The second argument is a space-delimited list of block devices to use for the special vdev.'
+    echo 'The third argument is a space-delimited list of block devices to use for the SLOG.'
+    echo
+    echo 'There must be at least two devices in each argument.'
+    echo 'All same-argument devices will be mirrored.'
     echo
     echo 'You can configure this script by editing `env.sh`.'
     echo
+    echo 'Warning: This script does not support spaces inside of device paths.'
     echo 'Warning: This script does not check validity. Make sure your block devices exist and are the same size.'
 }
 
 ## Validate parameters
-if [[ $# -lt 2 ]]; then
+if [[ ! $# -eq 3 ]]; then
     helptext >&2
     exit 1
 fi
 
 ## Define variables
 ENV_FILE='./env.sh'; if [[ -f "$ENV_FILE" ]]; then source ./env.sh; else echo "ERROR: Missing '$ENV_FILE'."; exit -1; fi
-ASHIFT=$(./helpers/calculate-powers-of-two.bash $ENV_HDD_SECTOR_SIZE)
+if [[ $ENV_HDD_SECTOR_SIZE -gt $ENV_SSD_SECTOR_SIZE ]]; then SECTOR_SIZE=$ENV_HDD_SECTOR_SIZE; else SECTOR_SIZE=$ENV_SSD_SECTOR_SIZE; fi
+ASHIFT=$(./helpers/calculate-powers-of-two.bash $SECTOR_SIZE)
 
 ## Create pool
 set -e
@@ -51,5 +57,7 @@ zpool create \
     -O compression=zstd:3 \
     \
     "$ENV_POOL_NAME" \
-    mirror "$@"
+    mirror $1 \
+    special mirror $2 \
+    log mirror $3
 exit $?
