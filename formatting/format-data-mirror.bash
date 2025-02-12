@@ -52,8 +52,5 @@ zpool create \
     mirror \
     "$@"
 
-## Check work
-zpool status
-
 ## Done
-exit 0
+exit $?
