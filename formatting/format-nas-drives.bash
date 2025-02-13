@@ -75,7 +75,7 @@ zpool create \
     -O canmount=off \
     -O mountpoint=none \
     \
-    "$ENV_POOL_NAME" \
+    "$ENV_NAS_POOL_NAME" \
     mirror $1 \
     special mirror $2 \
     log mirror $3

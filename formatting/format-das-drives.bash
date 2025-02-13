@@ -68,6 +68,6 @@ zpool create \
     -O canmount=off \
     -O mountpoint=none \
     \
-    "$ENV_POOL_NAME" \
+    "$ENV_DAS_POOL_NAME" \
     mirror "$@"
 exit $?
