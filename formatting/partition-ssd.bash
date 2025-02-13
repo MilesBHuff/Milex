@@ -6,8 +6,6 @@ function helptext {
     echo 'The provided block devices will all be given the same partition layout.'
     echo 'There will be an SLOG partition and an SVDEV partition.'
     echo
-    echo 'You can configure this script by editing `env.sh`.'
-    echo
     echo 'Warning: This script does not check validity. Make sure your block devices exist and are the same size.'
 }
 
@@ -29,8 +27,8 @@ for DEVICE in "$@"; do
     ## Create GPT partition table
     sgdisk --zap-all "$DEVICE"
     ## Create SLOG partition
-    sgdisk --new=1:0:+12G --typecode=1:BF01 --change-name=1:SLOG "$DEVICE"
+    sgdisk --new=1:0:+12G --typecode=1:BF02 --change-name=1:SLOG "$DEVICE"
     ## Create SVDEV partition
-    sgdisk --new=2:0:0 --typecode=2:BF01 --change-name=2:SVDEV "$DEVICE"
+    sgdisk --new=2:0:0 --typecode=2:BF02 --change-name=2:SVDEV "$DEVICE"
 done
 exit $EXIT_CODE
