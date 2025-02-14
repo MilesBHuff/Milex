@@ -1,22 +1,17 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: format-nas-drives.bash 'device0 [device1 ...]' 'device0 [device1 ...]' 'device0 [device1 ...]'"
+    echo "Usage: zfs-format-das-drives.bash device0 device1 [device2 ...]"
     echo
-    echo 'The first argument is a space-delimited list of block devices to use for the main storage pool.'
-    echo 'The second argument is a space-delimited list of block devices to use for the special vdev.'
-    echo 'The third argument is a space-delimited list of block devices to use for the SLOG.'
-    echo
-    echo 'There must be at least two devices in each argument.'
-    echo 'All same-argument devices will be mirrored.'
+    echo 'Pass at least two block devices as arguments.'
+    echo 'All specified devices will be made into mirrors of each other.'
     echo
     echo 'You can configure this script by editing `env.sh`.'
     echo
-    echo 'Warning: This script does not support spaces inside of device paths.'
     echo 'Warning: This script does not check validity. Make sure your block devices exist and are the same size.'
 }
 
 ## Validate parameters
-if [[ ! $# -eq 3 ]]; then
+if [[ $# -lt 2 ]]; then
     helptext >&2
     exit 1
 fi
@@ -44,9 +39,8 @@ set -e
 zpool create \
     -o ashift="$ASHIFT" \
     -O recordsize=256K \
-    -O special_small_blocks=64K \
     \
-    -O sync=standard \
+    -O sync=disabled \
     -O logbias=latency \
     \
     -O normalization=formD \
@@ -70,13 +64,10 @@ zpool create \
     -O keylocation=prompt \
     \
     -O compression=zstd:3 \
-    -O autotrim=on \
     \
     -O canmount=off \
     -O mountpoint=none \
     \
-    "$ENV_NAS_POOL_NAME" \
-    mirror $1 \
-    special mirror $2 \
-    log mirror $3
+    "$ENV_DAS_POOL_NAME" \
+    mirror "$@"
 exit $?
