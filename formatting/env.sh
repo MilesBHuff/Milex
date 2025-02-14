@@ -11,6 +11,8 @@ export OS_NAME='os'
 export SLOG_NAME='slog'
 export SVDEV_NAME='svdev'
 
+export OS_LUKS_NAME="crypt-$OS_NAME"
+
 ## Mount Options
 
 export ESP_MOUNT_OPTIONS='noatime,lazytime,sync,flush,tz=UTC,iocharset=utf8,fmask=0137,dmask=0027,nodev,noexec,nosuid'
