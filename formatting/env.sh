@@ -5,6 +5,7 @@
 
 export ENV_NAS_POOL_NAME='nas-pool'
 export ENV_DAS_POOL_NAME='das-pool'
+export ENV_OS_POOL_NAME='os-pool'
 
 export ESP_NAME='esp'
 export OS_NAME='os'
