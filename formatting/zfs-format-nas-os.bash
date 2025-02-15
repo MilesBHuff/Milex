@@ -8,6 +8,7 @@ function helptext {
     echo 'You can configure this script by editing `env.sh`.'
     echo
     echo 'Warning: This script does not check validity. Make sure your block devices exist and are the same size.'
+    echo 'Info: This script is written for putting the OS on an SSD.'
     echo 'Notice: You need to use systemd-boot and put /boot on your ESP, or you need to use ZFSBootMenu.'
 }
 
