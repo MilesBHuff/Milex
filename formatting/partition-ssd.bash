@@ -26,8 +26,8 @@ else
     exit 2
 fi
 if [[
-    -z "$SLOG_NAME" ||\
-    -z "$SVDEV_NAME"
+    -z "$ENV_SLOG_NAME" ||\
+    -z "$ENV_SVDEV_NAME"
 ]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
@@ -45,8 +45,8 @@ for DEVICE in "$@"; do
     ## Create GPT partition table
     sgdisk --zap-all "$DEVICE"
     ## Create SLOG partition
-    sgdisk --new=1:0:+12G --typecode=1:BF02 --change-name=1:"$SLOG_NAME" "$DEVICE"
+    sgdisk --new=1:0:+12G --typecode=1:BF02 --change-name=1:"$ENV_SLOG_NAME" "$DEVICE"
     ## Create SVDEV partition
-    sgdisk --new=2:0:0 --typecode=2:BF02 --change-name=2:"$SVDEV_NAME" "$DEVICE"
+    sgdisk --new=2:0:0 --typecode=2:BF02 --change-name=2:"$ENV_SVDEV_NAME" "$DEVICE"
 done
 exit $EXIT_CODE

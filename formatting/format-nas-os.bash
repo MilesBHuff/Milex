@@ -26,8 +26,8 @@ else
 fi
 if [[
     -z "$ENV_SSD_SECTOR_SIZE" ||\
-    -z "$OS_NAME" ||\
-    -z "$OS_LUKS_NAME"
+    -z "$ENV_OS_NAME" ||\
+    -z "$ENV_OS_LUKS_NAME"
 ]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
@@ -35,15 +35,15 @@ fi
 
 ## Format devices
 set -e
-mdadm --create --verbose --level=1 --raid-devices=$# --metadata=1.2 --name="$OS_NAME" "/dev/md/$OS_NAME" "$@"
-cryptsetup luksFormat "/dev/md/$OS_NAME"
-cryptsetup open "/dev/md/$OS_NAME" "$OS_LUKS_NAME"
-mkfs.btrfs -L "$OS_NAME" --sectorsize "$ENV_SSD_SECTOR_SIZE" -c lzo "/dev/mapper/$OS_LUKS_NAME"
+mdadm --create --verbose --level=1 --raid-devices=$# --metadata=1.2 --name="$ENV_OS_NAME" "/dev/md/$ENV_OS_NAME" "$@"
+cryptsetup luksFormat "/dev/md/$ENV_OS_NAME"
+cryptsetup open "/dev/md/$ENV_OS_NAME" "$ENV_OS_LUKS_NAME"
+mkfs.btrfs -L "$ENV_OS_NAME" --sectorsize "$ENV_SSD_SECTOR_SIZE" -c lzo "/dev/mapper/$ENV_OS_LUKS_NAME"
 
 ## First mount
 MOUNTPOINT="/tmp/mnt-$(uuidgen)"
 mkdir -p "$MOUNTPOINT"
-mount -o "${OS_MOUNT_OPTIONS:-defaults}" "/dev/md/$OS_NAME" "$MOUNTPOINT"
+mount -o "${ENV_OS_MOUNT_OPTIONS:-defaults}" "/dev/md/$ENV_OS_NAME" "$MOUNTPOINT"
 sleep 1
 umount -f "$MOUNTPOINT"
 rmdir "$MOUNTPOINT"

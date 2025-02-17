@@ -7,17 +7,17 @@ export ENV_NAS_POOL_NAME='nas-pool'
 export ENV_DAS_POOL_NAME='das-pool'
 export ENV_OS_POOL_NAME='os-pool'
 
-export ESP_NAME='esp'
-export OS_NAME='os'
-export SLOG_NAME='slog'
-export SVDEV_NAME='svdev'
+export ENV_ESP_NAME='esp'
+export ENV_OS_NAME='os'
+export ENV_SLOG_NAME='slog'
+export ENV_SVDEV_NAME='svdev'
 
-export OS_LUKS_NAME="crypt-$OS_NAME"
+export ENV_OS_LUKS_NAME="crypt-$ENV_OS_NAME"
 
 ## Mount Options
 
-export ESP_MOUNT_OPTIONS='noatime,lazytime,sync,flush,tz=UTC,iocharset=utf8,fmask=0137,dmask=0027,nodev,noexec,nosuid'
-export OS_MOUNT_OPTIONS='noatime,lazytime,ssd,discard=async,compress=lzo'
+export ENV_ESP_MOUNT_OPTIONS='noatime,lazytime,sync,flush,tz=UTC,iocharset=utf8,fmask=0137,dmask=0027,nodev,noexec,nosuid'
+export ENV_OS_MOUNT_OPTIONS='noatime,lazytime,ssd,discard=async,compress=lzo'
 
 ## Misc Options
 
