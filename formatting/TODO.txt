@@ -1,0 +1,3 @@
+* `zpool trim nas-pool` periodically (daily?)
+* `zpool trim das-pool` after copying data to it
+* Add "ENV_" prefix to variables that are missing it
