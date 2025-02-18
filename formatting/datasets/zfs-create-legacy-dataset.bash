@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-DATASET_NAME='legacy'
 function helptext {
     echo "Usage: zfs-create-legacy-dataset.bash pool-name"
     echo
@@ -16,6 +15,9 @@ if [[ ! $# -eq 1 ]]; then
     helptext >&2
     exit 1
 fi
+
+## Variables
+DATASET_NAME='legacy'
 
 ## Create dataset
 set -e
