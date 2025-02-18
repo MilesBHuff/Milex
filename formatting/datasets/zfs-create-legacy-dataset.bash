@@ -18,6 +18,7 @@ fi
 
 ## Variables
 DATASET_NAME='legacy'
+ZFS_ROOT='/media/zfs'
 
 ## Create dataset
 set -e
@@ -27,7 +28,7 @@ zfs create \
     -O normalization=none \
     \
     -O canmount=on \
-    -O mountpoint=none \
+    -O mountpoint="$ZFS_ROOT/$1/$DATASET_NAME" \
     \
     "$1/$DATASET_NAME"
 exit $?
