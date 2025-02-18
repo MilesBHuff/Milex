@@ -34,6 +34,7 @@ echo "options zfs zfs_txg_size_limit=$(($ENV_ACCEPTABLE_DATA_LOSS_SECONDS * ($EN
 echo "options zfs zfs_txg_maxsize=$(($ENV_ACCEPTABLE_DATA_LOSS_SECONDS * ($ENV_THEORETICAL_MAX_HDD_SPEED_MBPS * (1024**2))))" >> "$FILE"
 ##
 echo "options zfs zfs_prefetch_disable=0" >> "$FILE"
+echo "options zfs l2arc_noprefetch=0" >> "$FILE"
 
 ## Notify user and exit.
 echo "Please reboot for these settings to take effect."
