@@ -51,7 +51,7 @@ for DEVICE in "$@"; do
     ## Create Linux OS partition
     sgdisk --new=2:0:+20G --typecode=2:8300 --change-name=2:"${ENV_NAME_OS^^}" "$DEVICE"
     ## Create SLOG partition
-    sgdisk --new=3:0:+12G --typecode=3:BF02 --change-name=3:"${ENV_NAME_SLOG^^}" "$DEVICE"
+    sgdisk --new=3:0:+16G --typecode=3:BF02 --change-name=3:"${ENV_NAME_SLOG^^}" "$DEVICE"
     ## Create SVDEV partition
     sgdisk --new=4:0:0 --typecode=4:BF02 --change-name=4:"${ENV_NAME_SVDEV^^}" "$DEVICE"
 done

@@ -45,7 +45,7 @@ for DEVICE in "$@"; do
     ## Create GPT partition table
     sgdisk --zap-all "$DEVICE"
     ## Create SLOG partition
-    sgdisk --new=1:0:+12G --typecode=1:BF02 --change-name=1:"$ENV_NAME_SLOG" "$DEVICE"
+    sgdisk --new=1:0:+16G --typecode=1:BF02 --change-name=1:"$ENV_NAME_SLOG" "$DEVICE"
     ## Create SVDEV partition
     sgdisk --new=2:0:0 --typecode=2:BF02 --change-name=2:"$ENV_NAME_SVDEV" "$DEVICE"
 done
