@@ -2,8 +2,8 @@
 set -e
 
 ## Variables
-SRC_DS='nas-pool'
-OUT_DS_PARENT='das-pool'
+[[ ! -z "$1" ]] && SRC_DS="$1" || SRC_DS='nas-pool'
+[[ ! -z "$2" ]] && OUT_DS_PARENT="$2" || OUT_DS_PARENT='das-pool'
 OUT_DS="$OUT_DS_PARENT/$SRC_DS"
 ## "DS" -> "Dataset"
 ## "SRC" -> "Source"
@@ -11,8 +11,8 @@ OUT_DS="$OUT_DS_PARENT/$SRC_DS"
 
 ## Configurables
 declare -i HOW_TO_REPLICATE=1 ## 0: First replication ever | 1: Subsequent replications | 2: Subsequent replications if `syncoid` is unavailable
-SNAPSHOT_NEW="$SRC_DS@2025-05-06T20:11:39-04:00" ## Only used in replication option 2. Optional.
-SNAPSHOT_OLD="$SRC_DS@2025-03-04T12:21-05:00" ## Only used in replication option 2. Find the last common snapshot with `zfs list -t snapshot`.
+[[ ! -z "$3" ]] && SNAPSHOT_NEW="$SRC_DS@$3" || SNAPSHOT_NEW= ## Only used in replication option 2. Optional.
+[[ ! -z "$4" ]] && SNAPSHOT_OLD="$SRC_DS@$4" || SNAPSHOT_OLD= ## Only used in replication option 2. Find the last common snapshot with `zfs list -t snapshot`.
 
 ## Before a replication
 zfs unmount -a
