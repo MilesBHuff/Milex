@@ -54,7 +54,12 @@ export ENV_THRESHOLD_SMALL_FILE='128K' ## Theoretically I'd do 64K, but my speci
 
 export ENV_ZPOOL_NORMALIZATION='formD'
 export ENV_ZPOOL_CASESENSITIVITY='sensitive'
+
 export ENV_ZPOOL_ATIME='off'
+
 export ENV_ZPOOL_ENCRYPTION='aes-256-gcm'
 export ENV_ZPOOL_CHECKSUM='blake3'
-export ENV_ZPOOL_COMPRESSION='lz4'
+
+export ENV_ZPOOL_COMPRESSION_FREE='lz4' ## Practically no performance implication
+export ENV_ZPOOL_COMPRESSION_BALANCED='zstd:2' ## Best ratio of CPU time to filesize
+export ENV_ZPOOL_COMPRESSION_MOST='zstd:9' #TODO: Benchmark different zstds, and find the highest level that doesn't decrease performance

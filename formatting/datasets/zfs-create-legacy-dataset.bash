@@ -28,7 +28,8 @@ else
     exit 2
 fi
 if [[
-    -z "$ENV_ZFS_ROOT"
+    -z "$ENV_ZFS_ROOT" ||\
+    -z "$ENV_ZPOOL_COMPRESSION_MOST"
 ]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
@@ -40,6 +41,8 @@ zfs create \
     \
     -o utf8only=off \
     -o normalization=none \
+    \
+    -O compression="$ENV_ZPOOL_COMPRESSION_MOST" \
     \
     -o canmount=on \
     -o mountpoint="$ENV_ZFS_ROOT/$1/$DATASET_NAME" \

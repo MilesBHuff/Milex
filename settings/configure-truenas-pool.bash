@@ -12,7 +12,8 @@ ENV_FILE='../env.sh'; if [[ -f "$ENV_FILE" ]]; then source ../env.sh; else echo 
 if [[ \
     -z "$ENV_SECONDS_DATA_LOSS_ACCEPTABLE" ||\
     -z "$ENV_SPEED_MBPS_MAX_SLOWEST_HDD" ||\
-    -z "$ENV_THRESHOLD_SMALL_FILE"
+    -z "$ENV_THRESHOLD_SMALL_FILE" ||\
+    -z "$ENV_ZPOOL_COMPRESSION_FREE"
 ]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
@@ -21,7 +22,7 @@ fi
 ## Configure TrueNAS's boot pool
 POOL_NAME='boot-pool'
 zfs set atime=off "$POOL_NAME"
-zfs set compression=lz4 "$POOL_NAME"
+zfs set compression="$ENV_ZPOOL_COMPRESSION_FREE" "$POOL_NAME"
 zfs set logbias=throughput "$POOL_NAME"
 zfs set recordsize="$ENV_RECORDSIZE_SSD" "$POOL_NAME"
 exit 0

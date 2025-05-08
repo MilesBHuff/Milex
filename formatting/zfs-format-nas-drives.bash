@@ -38,7 +38,7 @@ if [[
     -z "$ENV_ZPOOL_ATIME" ||\
     -z "$ENV_ZPOOL_CASESENSITIVITY" ||\
     -z "$ENV_ZPOOL_CHECKSUM" ||\
-    -z "$ENV_ZPOOL_COMPRESSION" ||\
+    -z "$ENV_ZPOOL_COMPRESSION_BALANCED" ||\
     -z "$ENV_ZPOOL_ENCRYPTION" ||\
     -z "$ENV_ZPOOL_NORMALIZATION"
 ]]; then
@@ -85,7 +85,7 @@ zpool create \
     -O keyformat=passphrase \
     -O keylocation=prompt \
     \
-    -O compression="$ENV_ZPOOL_COMPRESSION" \
+    -O compression="$ENV_ZPOOL_COMPRESSION_BALANCED" \
     \
     -O canmount=on \
     -O mountpoint="$ENV_ZFS_ROOT/$ENV_POOL_NAME_NAS" \
