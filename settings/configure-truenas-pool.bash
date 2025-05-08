@@ -23,5 +23,5 @@ POOL_NAME='boot-pool'
 zfs set atime=off "$POOL_NAME"
 zfs set compression=lz4 "$POOL_NAME"
 zfs set logbias=throughput "$POOL_NAME"
-zfs set recordsize="$ENV_SMALL_FILE_THRESHOLD" "$POOL_NAME"
+zfs set recordsize="$ENV_SSD_RECORDSIZE" "$POOL_NAME"
 exit 0

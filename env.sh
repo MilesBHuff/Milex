@@ -43,5 +43,9 @@ export ENV_SLOWEST_SSD_MAX_SPEED_MBPS=543 ## Tested with `hdparm -t`: 543, 543, 
 export ENV_SLOWEST_HDD_AVG_SPEED_MBPS=$(($ENV_SLOWEST_HDD_MAX_SPEED_MBPS / 2)) #TODO: Measure
 export ENV_SLOWEST_SSD_AVG_SPEED_MBPS=$(($ENV_SLOWEST_SSD_MAX_SPEED_MBPS / 2)) #TODO: Measure
 
-export ENV_LARGE_FILE_THRESHOLD='256K'
+## Sizes
+
+export ENV_HDD_RECORDSIZE='256K'
+export ENV_SSD_RECORDSIZE='64K'
+
 export ENV_SMALL_FILE_THRESHOLD='128K' ## Theoretically I'd do 64K, but my specific data is still at less than 5% when including all files up to 128K.

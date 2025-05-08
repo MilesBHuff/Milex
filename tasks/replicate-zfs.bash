@@ -17,8 +17,8 @@ if [[ \
 fi
 
 ## Variables
-[[ ! -z "$1" ]] && SRC_DS="$1" || SRC_DS='nas-pool'
-[[ ! -z "$2" ]] && OUT_DS_PARENT="$2" || OUT_DS_PARENT='das-pool'
+[[ ! -z "$1" ]] && SRC_DS="$1" || SRC_DS="$ENV_NAS_POOL_NAME"
+[[ ! -z "$2" ]] && OUT_DS_PARENT="$2" || OUT_DS_PARENT="$ENV_DAS_POOL_NAME"
 OUT_DS="$OUT_DS_PARENT/$SRC_DS"
 ## "DS" -> "Dataset"
 ## "SRC" -> "Source"
