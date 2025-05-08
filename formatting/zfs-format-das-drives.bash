@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: zfs-format-das-drives.bash device0 device1 [device2 ...]"
+    echo "Usage: zfs-format-das-drives.bash device0 [device1 ...]"
     echo
-    echo 'Pass at least two block devices as arguments.'
-    echo 'All specified devices will be made into mirrors of each other.'
+    echo 'Pass at least one block device as an argument.'
+    echo 'If more than one device is specified, then all will be made into mirrors of each other.'
     echo
     echo 'You can configure this script by editing `env.sh`.'
     echo
@@ -11,10 +11,11 @@ function helptext {
 }
 
 ## Validate parameters
-if [[ $# -lt 2 ]]; then
+if [[ $# -lt 1 ]]; then
     helptext >&2
     exit 1
 fi
+[[ $# -gt 1 ]] && MIRROR='mirror'
 
 ## Get environment
 ENV_FILE='../env.sh'
@@ -77,5 +78,5 @@ zpool create \
     -O mountpoint="$ENV_ZFS_ROOT/$ENV_DAS_POOL_NAME" \
     \
     "$ENV_DAS_POOL_NAME" \
-    mirror "$@"
+    "$MIRROR" "$@"
 exit $?
