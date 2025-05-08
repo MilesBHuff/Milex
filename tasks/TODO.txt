@@ -1,4 +1,1 @@
 * Create cronjob: daily at 3am: `zpool trim nas-pool` as root
-* Create script to copy data from nas-pool to das-pool using `rsync`
-  * Can't use `zfs send` due to data corruption bug in ZFS when also using encryption
-  * Make sure to `zpool trim das-pool` after copying data to it
