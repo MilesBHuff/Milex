@@ -32,10 +32,15 @@ function rsyncoid {
     }
 
     local TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+
+    clear
     "$RSYNC" \
-        -hP -HS -aAEX -W --numeric-ids --no-compress --no-checksum --bwlimit=0 \
+        -hP --no-partial -HS -aAEX --numeric-ids --checksum --update --inplace --whole-file --no-compress --bwlimit=0 --block-size=128K --outbuf=B,$((16*(1024**2))) \
         "$1" "$2" \
         2> >(tee "$LOGDIR/rsyncoid_$TIMESTAMP.stderr.txt" >&2)
-    #NOTE: If updating data instead of copying for the first time, remove `-W --no-checksum` and add ` --append-verify`.
+    #NOTE: If you're copying locally (not over USB3 or network), add `--no-checksum` for more performance.
     #NOTE: If you're sending this over the network, remove `--no-compress`.
+    #NOTE: If the writes must be atomic, add `--fsync`
+    #NOTE: If you are using ZFS, set `outbuf` to your recordsize.
+    #NOTE: Remove `--inplace` if destination FS is not CoW.
 }

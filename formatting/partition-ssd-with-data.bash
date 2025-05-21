@@ -42,10 +42,12 @@ for DEVICE in "$@"; do
         EXIT_CODE=2
         continue
     fi
+    ## TRIM entire device (also wipes data, albeit insecurely)
+    blkdiscard -f "$DEVICE"
     ## Create GPT partition table
     sgdisk --zap-all "$DEVICE"
     ## Create SLOG partition
-    sgdisk --new=1:0:+16G --typecode=1:BF02 --change-name=1:"$ENV_NAME_SLOG" "$DEVICE"
+    sgdisk --new=1:0:+6G --typecode=1:BF02 --change-name=1:"$ENV_NAME_SLOG" "$DEVICE" ## The absolute worst-possible-case scenario with default settings is apparently 4.8G. 5G covers that, and 6G covers that without performance degradation.
     ## Create SVDEV partition
     sgdisk --new=2:0:0 --typecode=2:BF02 --change-name=2:"$ENV_NAME_SVDEV" "$DEVICE"
 done

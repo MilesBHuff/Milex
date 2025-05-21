@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #IMPORTANT: It is imperative that the first snapshot on each dataset is the same exact name. If this is not the case, you will be in pain forever.
-set -e
 
 ## Make sure we're root
 if [[ $EUID -ne 0 ]]; then
@@ -43,6 +42,7 @@ if zfs list -Ho name "$OUT_DS"; then
     done
 fi
 
+set -e
 case "$HOW_TO_REPLICATE" in
     0) ## Do this only for the first replication.
         SNAPSHOT="$SRC_DS@initial" ## Ideally, you should have created this snapshot when you first created the dataset, before any data was added.

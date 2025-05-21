@@ -77,6 +77,7 @@ zpool create -f \
     -O checksum="$ENV_ZPOOL_CHECKSUM" \
     \
     -O encryption="$ENV_ZPOOL_ENCRYPTION" \
+    -O pbkdf2iters="$ENV_ZPOOL_PBKDF2ITERS" \
     -O keyformat=passphrase \
     -O keylocation=prompt \
     \

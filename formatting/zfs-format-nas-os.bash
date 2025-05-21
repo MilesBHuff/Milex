@@ -77,14 +77,15 @@ zpool create \
     -O checksum="$ENV_ZPOOL_CHECKSUM" \
     \
     -O encryption="$ENV_ZPOOL_ENCRYPTION" \
+    -O pbkdf2iters="$PBKDF2ITERS" \
     -O keyformat=passphrase \
     -O keylocation=prompt \
     \
     -O compression="$ENV_ZPOOL_COMPRESSION_FREE" \
     \
     -O canmount=on \
-    -O mountpoint=/ \
     \
     "$ENV_POOL_NAME_OS" \
     mirror "$@"
+#    -O mountpoint=/ \
 exit $?

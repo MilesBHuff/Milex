@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: zfs-format-nas-drives.bash 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]'"
+    echo "Usage: zfs-format-nas-drives.bash 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' ['device0']"
     echo
     echo 'The first argument is a space-delimited list of block devices to use for the main storage pool.'
     echo 'The second argument is a space-delimited list of block devices to use for the special vdev.'
     echo 'The third argument is a space-delimited list of block devices to use for the SLOG.'
+    echo 'The fourth argument is optional, and is a single block device to use for the L2ARC.'
     echo
     echo 'There must be at least two devices in each argument.'
     echo 'All same-argument devices will be mirrored.'
@@ -16,7 +17,7 @@ function helptext {
 }
 
 ## Validate parameters
-if [[ ! $# -eq 3 ]]; then
+if [[ $# -lt 3 || $# -gt 4 ]]; then
     helptext >&2
     exit 1
 fi
@@ -56,9 +57,12 @@ if [[ -z $ASHIFT ]]; then
    exit 4
 fi
 
+## Are we adding an L2ARC?
+[[ $# -eq 4 ]] && CACHE="cache $4"
+
 ## Create pool
 set -e
-zpool create \
+zpool create -f \
     -o ashift="$ASHIFT" \
     -O recordsize="$ENV_RECORDSIZE_HDD" \
     -O special_small_blocks="$ENV_THRESHOLD_SMALL_FILE" \
@@ -82,6 +86,7 @@ zpool create \
     -O checksum="$ENV_ZPOOL_CHECKSUM" \
     \
     -O encryption="$ENV_ZPOOL_ENCRYPTION" \
+    -O pbkdf2iters="$ENV_ZPOOL_PBKDF2ITERS" \
     -O keyformat=passphrase \
     -O keylocation=prompt \
     \
@@ -93,5 +98,8 @@ zpool create \
     "$ENV_POOL_NAME_NAS" \
     mirror $1 \
     special mirror $2 \
-    log mirror $3
-exit $?
+    log mirror $3 \
+    $CACHE
+declare -i EXIT_CODE=$?
+zfs snapshot "${ENV_POOL_NAME_NAS}@initial"
+exit $EXIT_CODE

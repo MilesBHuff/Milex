@@ -17,7 +17,7 @@ if [[ ! $# -eq 1 ]]; then
 fi
 
 ## Variables
-DATASET_NAME='legacy'
+DATASET_NAME='legacy/recovered'
 
 ## Get environment
 ENV_FILE='../env.sh'
@@ -40,8 +40,7 @@ fi
 set -e
 zfs create \
     \
-    -o utf8only=off \
-    -o normalization=none \
+    -o normalization="$ENV_ZPOOL_NORMALIZATION" \
     \
     -o recordsize="$ENV_RECORDSIZE_ARCHIVE" \
     -o compression="$ENV_ZPOOL_COMPRESSION_MOST" \
