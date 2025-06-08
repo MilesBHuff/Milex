@@ -28,8 +28,10 @@ fi
 if [[
     -z "$ENV_NAME_ESP" ||\
     -z "$ENV_NAME_OS" ||\
+    -z "$ENV_NAME_RESERVED" ||\
     -z "$ENV_NAME_SLOG" ||\
-    -z "$ENV_NAME_SVDEV"
+    -z "$ENV_NAME_SVDEV" ||\
+    -z "$ENV_ZFS_SECTORS_RESERVED"
 ]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
@@ -44,11 +46,20 @@ for DEVICE in "$@"; do
         EXIT_CODE=2
         continue
     fi
+    ## Ensure correct alignment value.
+    declare -i ALIGNMENT=$(((1024 ** 2) / $(blockdev --getss "$DEVICE"))) ## Always equals 1MiB in sectors. Is 2048 unless drive is 4Kn, in which case is 256. This math avoids the undesirable default situation which is to waste 8MiB instead of 1MiB on 4Kn disks.
+    ## TRIM entire device (also wipes data, albeit insecurely)
+    # blkdiscard -f "$DEVICE"
     ## Create GPT partition table
+    set +e
+    sgdisk --zap-all "$DEVICE" >/dev/null 2>&1 ## First run seems to always fail on this one; maybe some kind of issue with mdadm?
+    set -e
     sgdisk --zap-all "$DEVICE"
-    ## Create ESP/Boot partition
-    sgdisk --new=1:2048:+2G --typecode=1:EF00 --change-name=1:"${ENV_NAME_ESP^^}" "$DEVICE"
-    ## Create Linux OS partition
-    sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:"${ENV_NAME_OS^^}" "$DEVICE"
+    ## Create reserved partition (to allow for future drive size mismatches)
+    sgdisk --set-alignment=1 --new=9:-"$ENV_ZFS_SECTORS_RESERVED":0 --typecode=9:BF07 --change-name=9:"$ENV_NAME_RESERVED" "$DEVICE"
+    ## Create ESP
+    sgdisk --set-alignment=$ALIGNMENT --new=1:0:+261MiB --typecode=1:EF00 --change-name=1:"${ENV_NAME_ESP^^}" "$DEVICE" ## Microsoft has good reasons for using 260MiB for its own ESPs: 260MiB is the bare minimum that FAT32 can be with 4K sectors. We then add an extra 1MiB to that to fit the 128KiB from mdadm.
+    ## Create ZFS Partition
+    sgdisk --set-alignment=$ALIGNMENT --new=2:0:0 --typecode=2:BF00 --change-name=2:"${ENV_NAME_OS^^}" "$DEVICE"
 done
 exit $EXIT_CODE

@@ -31,6 +31,9 @@ else
     exit 2
 fi
 if [[
+    -z "$ENV_NAME_CACHE" ||\
+    -z "$ENV_NAME_RESERVED" ||\
+    -z "$ENV_NAME_VDEV" ||\
     -z "$ENV_POOL_NAME_NAS" ||\
     -z "$ENV_RECORDSIZE_HDD" ||\
     -z "$ENV_SECTOR_SIZE_HDD" ||\
@@ -102,4 +105,15 @@ zpool create -f \
     $CACHE
 declare -i EXIT_CODE=$?
 zfs snapshot "${ENV_POOL_NAME_NAS}@initial"
+
+## Configure partitions
+sgdisk --typecode=1:bf02 "$4" ## Makes more sense for the cache device to use this code than the default.
+sgdisk --change-name=1:"$ENV_NAME_CACHE" "$4" ## For consistency with the non-whole-disk partition labels.
+sgdisk --change-name=9:"$ENV_NAME_RESERVED" "$4" ## Empty by default
+for DEVICE in "${1[@]}"; do
+    sgdisk --change-name=1:"$ENV_NAME_VDEV" "$DEVICE" ## For consistency with the non-whole-disk partition labels.
+    sgdisk --change-name=9:"$ENV_NAME_RESERVED" "$DEVICE" ## Empty by default
+do
+
+## Done
 exit $EXIT_CODE

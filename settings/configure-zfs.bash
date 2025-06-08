@@ -102,7 +102,7 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
         apply-setting "$SETTING_NEW" "$SETTING_PATH"
 
         SETTING_PATH="$DEV/queue/optimal_io_size"
-        if [[ $(cat "$SETTING_PATH") -eq 0 ]]; then
+        if [[ $(cat "$SETTING_PATH") -eq 0 ]]; then ## Only set if it wasn't set automatically.
             SETTING_NEW=$(($SETTING_NEW * 1024))
             apply-setting "$SETTING_NEW" "$SETTING_PATH"
         fi

@@ -65,6 +65,9 @@ case "$HOW_TO_REPLICATE" in
         ;;
 esac
 
+## Unlock the replicated dataset
+zfs load-key -r "$OUT_DS"
+
 ## After a replication
 zfs list -Hro name "$OUT_DS" | while read -r DS; do
     MOUNTPOINT="$ENV_ZFS_ROOT/$OUT_DS_PARENT${DS#$OUT_DS_PARENT}"
@@ -72,8 +75,7 @@ zfs list -Hro name "$OUT_DS" | while read -r DS; do
 done
 zfs set readonly=on "$OUT_DS"
 
-## Unlock the replicated dataset
-zfs load-key -r "$OUT_DS"
+## Mount the replicated dataset
 zfs mount -a
 
 ## Done

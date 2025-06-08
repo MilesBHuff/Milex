@@ -88,4 +88,13 @@ zpool create -f \
     \
     "$ENV_POOL_NAME_DAS" \
     $MIRROR "$@"
-exit $?
+declare -i EXIT_CODE=$?
+
+## Configure partitions
+for DEVICE in "${@[@]}"; do
+    sgdisk --change-name=1:"$ENV_NAME_VDEV" "$DEVICE" ## For consistency with the non-whole-disk partition labels.
+    sgdisk --change-name=9:"$ENV_NAME_RESERVED" "$DEVICE" ## Empty by default
+do
+
+## Done
+exit $EXIT_CODE
