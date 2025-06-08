@@ -298,34 +298,24 @@ done
 echo ':: Modifying filesystem hierarchy...'
 bash ../configure-filesystem-hierarchy.bash
 
-## Better bitmap font
-echo ':: Installing better bitmap font...'
-FILE='/etc/default/console-setup'
-# curl 'https://github.com/bynux-gh/bynfont/releases/download/v2.1/bynfont.psfu.gz' -o /usr/local/share/consolefonts/Bynfont.psfu.gz
-# ln -s /usr/local/share/consolefonts/Bynfont.psfu.gz /usr/share/consolefonts/
-# cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="Bynfont"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
-cd /tmp
-git clone https://github.com/sunaku/tamzen-font.git
-# cd tamzen-font/psf
+# ## Better bitmap font
+# echo ':: Installing better bitmap font...'
+# FILE='/etc/default/console-setup'
+# cd /tmp
+# git clone https://github.com/sunaku/tamzen-font.git
+# cd tamzen-font/bdf
+# apt install -y bdf2psf
+# mkdir psf
+# B2P='/usr/share/bdf2psf'
+# bdf2psf --fb Tamzen8x16b.bdf "$B2P/standard.equivalents" "$B2P/ascii.set+$B2P/linux.set+$B2P/useful.set" 512 psf/TamzenBold8x16.psf
+# cd psf
 # gzip --best *
 # cp * /usr/local/share/consolefonts/
 # cd /usr/local/share/consolefonts
 # rm -rf /tmp/tamzen-font
-# ln -s * /usr/share/consolefonts/
-# cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenForPowerline"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="7x13/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
-cd tamzen-font/bdf
-apt install -y bdf2psf
-mkdir psf
-B2P='/usr/share/bdf2psf'
-bdf2psf --fb Tamzen8x16b.bdf "$B2P/standard.equivalents" "$B2P/ascii.set+$B2P/linux.set+$B2P/useful.set" 512 psf/TamzenBold8x16.psf
-cd psf
-gzip --best *
-cp * /usr/local/share/consolefonts/
-cd /usr/local/share/consolefonts
-rm -rf /tmp/tamzen-font
-ln -s * /usr/share/kbd/consolefonts/
-cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenBold"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
-cd "$CWD"
+# ln -s * /usr/share/kbd/consolefonts/
+# cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenBold"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
+# cd "$CWD"
 
 ## Wrap up
 echo ':: Wrapping up...'
