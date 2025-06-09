@@ -87,7 +87,7 @@ export ENV_ZPOOL_CASESENSITIVITY='sensitive' ## Best for strictness.
 
 export ENV_ZPOOL_ATIME='off' ## Terrible for performance, and *might* cause data duplication on snapshotting (it definitely does in btrfs) — `atime` is fwiu generally incompatible with CoW+snapshotting.
 
-export ENV_ZPOOL_ENCRYPTION='aes-256-gcm' ## Better performance than CCM. Not significantly slower than 128 on my system.
+export ENV_ZPOOL_ENCRYPTION='aes-128-gcm' ## GCM is better performance than CCM. 128 is faster than 256 and I see no evidence that it will ever be possible for classical or quantum computing to be able to realistically or affordably ever break it in my lifetime.
 export ENV_ZPOOL_PBKDF2ITERS='999999' ## Run `cryptsetup benchmark` and divide PBKDF2-sha256 by 10 or less to get this number. This makes it take 125ms to unlock this pool on your current computer, and annoys the heck out of attackers.
 export ENV_ZPOOL_CHECKSUM='fletcher4' ## This is the default, and is so fast as to be free. Cryptographic hashes like BLAKE3 are ridiculously slower, and provide no benefit if you are not using deduplication or `zfs send | recv`ing from untrusted devices or renting out entire datasets to users with root-level access to those datasets. `cat /proc/sys/kstat/fletcher_4_bench /proc/sys/kstat/chksum_bench` for details.
 

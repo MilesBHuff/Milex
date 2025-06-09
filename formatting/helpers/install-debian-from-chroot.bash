@@ -250,7 +250,7 @@ mkdir -p /etc/systemd/system/tmp.mount.d
 cat > /etc/systemd/system/tmp.mount.d/override.conf <<EOF
 [Mount]
 Options=mode=1777,nosuid,nodev,size=5G,noatime
-## 5G is enough space to have 1G free while extracting a 4G archive. 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
+## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
 EOF
 cat > /etc/systemd/system/console-setup.service.d/override.conf <<EOF
 [Unit]
@@ -313,7 +313,7 @@ KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE page_alloc.shuffle=1"
 read -p 'Please enter your wireless regulatory domain: ('US' for the USA) ' REGDOM
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE cfg80211.ieee80211_regdom=$REGDOM"
 
-## Disable various compressions (ZFS does compression for us.)
+## Disable various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
 echo ':: Avoiding double-compression...'
 FILE='/etc/initramfs-tools/initramfs.conf'
 cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=lz4/' | sed -ir 's/^# (COMPRESS_LEVEL)=.*/\1=0/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
@@ -348,10 +348,22 @@ bash ../configure-filesystem-hierarchy.bash
 # cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenBold"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
 # cd "$CWD"
 
+## Set kernel commandline
+echo ':: Setting kernel commandline...'
+KERNEL_COMMANDLINE_DIR='/etc/zfsbootmenu/commandline'
+mkdir -p "$KERNEL_COMMANDLINE_DIR"
+echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
+cat > "$KERNEL_COMMANDLINE_DIR/set-commandline" <<'EOF'
+#!/bin/sh
+DS=os-pool/OS/debian
+COMMANDLINE="$(cat /etc/zfsbootmenu/commandline/commandline.txt | xargs)"
+zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "$DS"
+zfs get org.zfsbootmenu:commandline "$DS"
+EOF
+update-initramfs -u
+
 ## Wrap up
 echo ':: Wrapping up...'
-zfs set org.zfsbootmenu:commandline="$KERNEL_COMMANDLINE" "$ENV_POOL_NAME_OS/OS/debian"
-update-initramfs -u
 zfs snapshot -r os-pool@install-debian
 
 ## Done
