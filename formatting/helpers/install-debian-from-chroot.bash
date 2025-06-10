@@ -188,6 +188,7 @@ echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in 
 
 ## Set up ZFS in the initramfs
 echo ':: Configuring the initramfs to support ZFS...'
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE init_on_alloc=0" ## `=1` causes major performance issues for ZFS. `=0` used to be the default. The minor and theoretical security improvements are not worth this much of a performance hit, and they only set it to `=1` in the first place because on non-ZFS systems it does not substantially impact performance.
 apt install -y zfs-initramfs
 KEYDIR=/etc/zfs/keys
 chmod 700 "$KEYDIR"
