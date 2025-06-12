@@ -270,6 +270,11 @@ After=tmp.mount
 EOF #BUG: Resolves an issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
 systemctl daemon-reload
 
+## Configure trim/discard
+echo ':: Scheduling trim...'
+systemctl enable fstrim.timer ## Auto-trims everything in /etc/fstab
+#TODO: Auto-trim zpools, too.
+
 ## Install MAC
 echo ':: Enabling Mandatory Access Control...'
 apt install -y apparmor apparmor-utils apparmor-notify apparmor-profiles apparmor-profiles-extra
