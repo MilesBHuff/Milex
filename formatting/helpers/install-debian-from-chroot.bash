@@ -427,10 +427,10 @@ sed -i 's|^ExecStart=.*|ExecStart=/usr/local/sbin/infnoise --daemon --pidfile=/v
 systemctl daemon-reload
 systemctl start infnoise
 
-## Disable various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
-echo ':: Avoiding double-compression...'
+## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
+echo ':: Tweaking various compression settings...'
 FILE='/etc/initramfs-tools/initramfs.conf'
-cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=lz4/' | sed -ir 's/^# (COMPRESS_LEVEL)=.*/\1=0/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
+cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -ir 's/^# (COMPRESS_LEVEL)=.*/\1=0/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
 mv -f "$FILE.new" "$FILE"
 for FILE in /etc/logrotate.conf /etc/logrotate.d/*; do
     if grep -Eq '(^|[^#y])compress' "$FILE"; then
