@@ -226,6 +226,24 @@ alias dev wwn-*
 EOF
 echo 'Make sure to import your pools with `import -d /dev/disk/by-id`! Else, you will fail to import when `/dev/sdX` changes. '
 
+## Enable hidden mount options
+#NOTE: ZFS does not provide properties for all of the mount options it supports. One such mount option is `lazytime`. So we have to use some kind of hook to automatically remount all zfs mounts with `lazytime` if we want to use it automatically.
+FILE=/etc/zfs/zed.d/mount-lazytime.sh
+cat > "$FILE" <<'EOF'
+#!/bin/sh
+## Triggered by ZED when a filesystem is mounted.
+[ "$ZEVENT_TYPE" != 'mount' ] && exit 0
+# OPTS=$(grep " $ZEVENT_PAYLOAD_MOUNTPOINT " /proc/self/mounts | cut -d ' ' -f4)
+OPTS=$(awk -v mountpoint="$ZEVENT_PAYLOAD_MOUNTPOINT" '$2 == mountpoint { print $4 }' /proc/self/mounts)
+case ",$OPTS," in
+    *,lazytime,*) ;;
+    *) mount -o remount,lazytime "$ZEVENT_PAYLOAD_MOUNTPOINT" ;;
+esac
+exit 0
+EOF
+chmod 0755 "$FILE"
+unset FILE
+
 ## Enable swap
 echo ':: Configuring swap...'
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lzo" #NOTE: Fractional percents (eg, `12.5`) are not possible.
