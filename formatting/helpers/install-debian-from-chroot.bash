@@ -476,6 +476,26 @@ bash ./configure-filesystem-hierarchy.bash
 # cd "$CWD"
 # unset FILE
 
+## Limit log size
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/max-size.conf <<EOF
+[Journal]
+Storage=persistent
+SystemMaxUse=256M
+RuntimeMaxUse=128M
+EOF
+
+## Set up `ssh`
+apt install -y openssh-server
+sed -Ei 's/^#?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+systemctl enable ssh
+
+## Configure CPU features
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE amd_iommu=on iommu=pt"
+cat > /etc/modprobe.d/kvm-amd.conf <<'EOF'
+options kvm-amd nested=1
+EOF
+
 ## Set kernel commandline
 echo ':: Setting kernel commandline...'
 KERNEL_COMMANDLINE_DIR='/etc/zfsbootmenu/commandline'
