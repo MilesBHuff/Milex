@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
 ## Also thanks to ChatGPT (not for code, but for helping with some installataion steps)
+set -euo pipefail
 
 ## Get environment
 CWD=$(pwd)
@@ -19,7 +20,12 @@ if [[
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
 fi
-set -e
+if [[
+    -z "$TARGET"
+]]; then
+    echo "ERROR: This script is designed to be run from \`install-debian.bash\`." >&2
+    exit 4
+fi
 
 ## Configure hostname
 echo ':: Configuring hostname...'
@@ -35,6 +41,16 @@ read -p "Copy the interface name you want to use, and paste it here; then press 
 cat > "/etc/network/interfaces.d/$INTERFACE_NAME" <<EOF
 auto $INTERFACE_NAME
 iface $INTERFACE_NAME inet dhcp
+EOF
+
+echo ':: Disabling Wi-Fi...'
+cat > /etc/modprobe.d/blacklist-wifi.conf <<'EOF'
+blacklist iwlwifi
+EOF
+
+echo ':: Configuring Wake-On-LAN...'
+cat > /etc/udev/rules.d/99-wol.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="en*", RUN+="/usr/sbin/ethtool -s %k wol g"
 EOF
 
 ## Configure apt
@@ -61,7 +77,7 @@ echo ':: Configuring system...'
 apt install -y locales
 dpkg-reconfigure locales
 apt install -y console-setup
-read -p "Note: 8x16 is considered kinda the standard size. Bold is easiest to read. VGA is probably your best bet. Press 'Enter' to continue. " FOO
+read -p "Note: 8x16 is considered kinda the standard size. Bold is easiest to read. VGA is probably your best bet. Press 'Enter' to continue. " FOO; unset FOO
 dpkg-reconfigure console-setup
 dpkg-reconfigure keyboard-configuration
 dpkg-reconfigure tzdata
@@ -70,14 +86,13 @@ dpkg-reconfigure tzdata
 echo ':: Creating user configs...'
 apt install -y tmux
 echo 'set -g status-position top' > /etc/skel/.tmux.conf
-echo >> /etc/.bashrc
-echo 'shopt -q login_shell && [[ -x $(which tmux) ]] && [[ ! -n "$TMUX" ]] && exec tmux' >> /etc/.bashrc
+echo 'shopt -q login_shell && [[ -x $(which tmux) ]] && [[ ! -n "$TMUX" ]] && exec tmux' >> /etc/skel/.bashrc
 
 ## Configure users
 echo ':: Configuring users...'
 echo 'Please enter a complex password for the root user: '
 passwd
-for FILE in $(ls -A /etc/skel); do cp "$FILE" /root/; done
+cp -a /etc/skel/. /root/
 read -p "Please enter a username for your personal user: " USERNAME
 adduser "$USERNAME"
 unset USERNAME
@@ -87,6 +102,7 @@ echo ':: Updating...'
 apt update
 apt full-upgrade -y
 apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
 
 ## Install Linux
 echo ':: Installing Linux...'
@@ -183,7 +199,7 @@ apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort
 make core dracut
 generate-zbm
 cd "$CWD"
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE quiet loglevel=5"
+KERNEL_COMMANDLINE="quiet loglevel=5"
 echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in your NVRAM, and sign your ZBM image with it.' >&2
 
 ## Set up ZFS in the initramfs
@@ -340,6 +356,7 @@ cat > /etc/systemd/system/tmp.mount.d/override.conf <<EOF
 Options=mode=1777,nosuid,nodev,size=5G,noatime
 ## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
 EOF
+mkdir -p /etc/systemd/system/console-setup.service.d
 cat > /etc/systemd/system/console-setup.service.d/override.conf <<EOF
 [Unit]
 Requires=tmp.mount
@@ -364,6 +381,7 @@ apt install -y chrony clamav clamav-daemon systemd-oomd
 systemctl enable chrony
 systemctl enable clamav-daemon
 systemctl enable clamav-freshclam
+systemctl enable systemd-oomd
 ## Niche
 apt install -y rasdaemon fail2ban nut-server
 systemctl enable fail2ban
@@ -380,8 +398,8 @@ apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 ## General firmware tools
 apt install -y fwupd iasl
 ## General hardware tools
-apt install -y cpufrequtils i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools tpm2-tools usbutils sysstat dmsetup # rng-tools-debian
-sensors detect
+apt install -y linux-tools-common linux-tools-$(uname -r) i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo # rng-tools-debian
+sensors-detect --auto
 # systemctl enable rng-tools-debian
 ## Specific firmware
 apt install -y amd64-microcode firmware-amd-graphics firmware-mellanox firmware-realtek
@@ -430,7 +448,7 @@ systemctl start infnoise
 ## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
 echo ':: Tweaking various compression settings...'
 FILE='/etc/initramfs-tools/initramfs.conf'
-cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -ir 's/^# (COMPRESS_LEVEL)=.*/\1=0/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
+cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -r 's/^# (COMPRESS_LEVEL)=.*/\1=0/' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
 mv -f "$FILE.new" "$FILE"
 for FILE in /etc/logrotate.conf /etc/logrotate.d/*; do
     if grep -Eq '(^|[^#y])compress' "$FILE"; then
@@ -481,8 +499,9 @@ unset KERNEL_COMMANDLINE_DIR
 update-initramfs -u
 
 ## Wrap up
-echo ':: Wrapping up...'
+echo ':: Creating snapshot...'
 zfs snapshot -r $ENV_POOL_NAME_OS@install-debian
 
 ## Done
+echo ':: Done.'
 exit 0
