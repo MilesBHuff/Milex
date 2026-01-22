@@ -442,7 +442,7 @@ unset FILE
 
 ## Reconfigure FSH
 echo ':: Modifying filesystem hierarchy...'
-bash ../configure-filesystem-hierarchy.bash
+bash ./configure-filesystem-hierarchy.bash
 
 # ## Better bitmap font
 # #FIXME: It doesn't handle box-drawing characters, and it could be made to handle Powerline characters.
