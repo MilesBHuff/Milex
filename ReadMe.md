@@ -9,3 +9,7 @@ This directory contains scripts that generate an optimized ZFS pool containing a
 ## Installation
 
 This directory contains scripts that install operating systems to a ZFS root. These scripts are capable of handling Debian and Ubuntu, and use ZFSBootMenu to permit booting directly to an encrypted ZFS.
+
+## License
+
+Copyright © 2024–2026 by Miles Bradley Huff per the terms of the General Public License (v3.0 or later)
