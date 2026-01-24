@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
-## This is a one-shot script that finishes setting up Debian in a chroot.
+function helptext {
+    echo "Usage: install-deb-distro-from-chroot.bash"
+    echo
+    echo 'This is a one-shot script that finishes setting up Debian or Ubuntu in a chroot.'
+    echo 'WARN: Although this is intended as a one-shot script, it *should* be more-or-less idempotent; just try to maintain consistent user responses between runs.'
+}
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
-## Also thanks to ChatGPT (not for code, but for helping with some installataion steps)
+## My thanks to ChatGPT (not as the author of this code (that's me), but for helping with my endless questions and providing advice)
 set -euo pipefail
+
+function idempotent_append {
+    ## $1: What to append
+    ## $2: Where to append it
+    [[ ! -f "$2" ]] && touch "$2"
+    grep -Fqx -- "$1" "$2" || printf '%s\n' "$1" >> "$2"
+}
 
 ## Get environment
 CWD=$(pwd)
@@ -22,52 +34,70 @@ if [[
     exit 3
 fi
 if [[
-    -z "$TARGET"
+    -z "$DEBIAN_VERSION" ||\
+    -z "$DISTRO" ||\
+    -z "$TARGET" ||\
+    -z "$UBUNTU_VERSION"
 ]]; then
-    echo "ERROR: This script is designed to be run from \`install-debian.bash\`." >&2
+    echo "ERROR: This script is designed to be run from a \`chroot\` spawned by \`install-deb-distro.bash\`." >&2
     exit 4
 fi
 
 ## Configure hostname
 echo ':: Configuring hostname...'
-HOSTNAME='artemis'
+read -p "What unqualified hostname would you like?: " HOSTNAME
 hostname "$HOSTNAME"
 hostname > '/etc/hostname'
-echo "127.0.1.1 $HOSTNAME" >> '/etc/hosts'
+sed -i '/^127\.0\.1\.1 /d' '/etc/hosts'
+idempotent_append "127.0.1.1 $HOSTNAME" '/etc/hosts'
 
-## Configure network
-echo ':: Configuring network...'
-ip addr show
-read -p "Copy the interface name you want to use, and paste it here; then press 'Enter': " INTERFACE_NAME
-cat > "/etc/network/interfaces.d/$INTERFACE_NAME.conf" <<EOF
-auto $INTERFACE_NAME
-iface $INTERFACE_NAME inet dhcp
+echo ':: Configuring Wi-Fi...'
+read -p 'Please enter your wireless regulatory domain: ("US" for the USA) ' REGDOM
+KERNEL_COMMANDLINE="cfg80211.ieee80211_regdom=$REGDOM"
+unset REGDOM
+apt install -y rfkill
+cat > /etc/udev/rules.d/80-rfkill-wifi.rules <<EOF
+SUBSYSTEM=="rfkill", ATTR{type}=="wlan", ACTION=="add|change", RUN+="/usr/sbin/rfkill block wifi"
 EOF
 
 echo ':: Configuring Wake-On-LAN...'
-cat > /etc/udev/rules.d/99-wol.rules <<'EOF'
+cat > /etc/udev/rules.d/99-wol.rules <<EOF
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="en*", RUN+="/usr/sbin/ethtool -s %k wol g"
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth*", RUN+="/usr/sbin/ethtool -s %k wol g"
 EOF
 
 ## Configure apt
 echo ':: Configuring apt...'
-cat > /etc/apt/sources.list <<EOF
-deb      http://deb.debian.org/debian/                bookworm                   main contrib non-free-firmware non-free
-deb-src  http://deb.debian.org/debian/                bookworm                   main contrib non-free-firmware non-free
+case $DISTRO in
+    1) cat > /etc/apt/sources.list <<EOF
+deb      http://deb.debian.org/debian/                $DEBIAN_VERSION                   main contrib non-free-firmware non-free
+deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION                   main contrib non-free-firmware non-free
 
-deb      http://deb.debian.org/debian/                bookworm-backports         main contrib non-free-firmware non-free
-deb-src  http://deb.debian.org/debian/                bookworm-backports         main contrib non-free-firmware non-free
+deb      http://deb.debian.org/debian/                $DEBIAN_VERSION-backports         main contrib non-free-firmware non-free
+deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION-backports         main contrib non-free-firmware non-free
 
-deb      http://deb.debian.org/debian/                bookworm-backports-sloppy  main contrib non-free-firmware non-free
-deb-src  http://deb.debian.org/debian/                bookworm-backports-sloppy  main contrib non-free-firmware non-free
+deb      http://deb.debian.org/debian/                $DEBIAN_VERSION-backports-sloppy  main contrib non-free-firmware non-free
+deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION-backports-sloppy  main contrib non-free-firmware non-free
 
-deb      http://security.debian.org/debian-security/  bookworm-security          main contrib non-free-firmware non-free
-deb-src  http://security.debian.org/debian-security/  bookworm-security          main contrib non-free-firmware non-free
+deb      http://security.debian.org/debian-security/  $DEBIAN_VERSION-security          main contrib non-free-firmware non-free
+deb-src  http://security.debian.org/debian-security/  $DEBIAN_VERSION-security          main contrib non-free-firmware non-free
 
-deb      http://deb.debian.org/debian/                bookworm-updates           main contrib non-free-firmware non-free
-deb-src  http://deb.debian.org/debian/                bookworm-updates           main contrib non-free-firmware non-free
-EOF
+deb      http://deb.debian.org/debian/                $DEBIAN_VERSION-updates           main contrib non-free-firmware non-free
+deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION-updates           main contrib non-free-firmware non-free
+EOF ;;
+    2) cat > /etc/apt/sources.list.d/official-package-repositories.list <<EOF
+deb http://mirror.brightridge.com/ubuntuarchive  $UBUNTU_VERSION            main restricted universe multiverse
+deb http://archive.canonical.com/ubuntu          $UBUNTU_VERSION            partner
+deb http://mirror.brightridge.com/ubuntuarchive  $UBUNTU_VERSION-updates    main restricted universe multiverse
+deb http://mirror.brightridge.com/ubuntuarchive  $UBUNTU_VERSION-backports  main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu            $UBUNTU_VERSION-security   main restricted universe multiverse
+EOF ;;
+esac
+set +e
+shopt -s nullglob
+${EDITOR:-nano} /etc/apt/sources.list.d/*
+shopt -u nullglob
+set -e
 
 ## Configure the system
 echo ':: Configuring system...'
@@ -83,19 +113,21 @@ dpkg-reconfigure tzdata
 echo ':: Creating user configs...'
 apt install -y tmux
 echo 'set -g status-position top' > /etc/skel/.tmux.conf
-echo 'shopt -q login_shell && [[ -x $(which tmux) ]] && [[ ! -n "$TMUX" ]] && exec tmux' >> /etc/skel/.bashrc
+idempotent_append 'shopt -q login_shell && command -v tmux && [[ ! -n "$TMUX" ]] && exec tmux' '/etc/skel/.bashrc'
 
 ## Configure users
 echo ':: Configuring users...'
-echo 'Please enter a complex password for the root user: '
-passwd
+if ! passwd -S root 2>/dev/null | grep -q ' P '; then
+    echo 'Please enter a complex password for the root user: '
+    passwd
+fi
 cp -a /etc/skel/. /root/
 read -p "Please enter a username for your personal user: " USERNAME
-adduser "$USERNAME"
-unset USERNAME
+id "$USERNAME" >/dev/null 2>&1 || adduser "$USERNAME"
+export USERNAME
 
 ## Get our packages up-to-date
-echo ':: Updating...'
+echo ':: Upgrading packages...'
 apt update
 apt full-upgrade -y
 apt install -y unattended-upgrades
@@ -106,21 +138,29 @@ apt install -y build-essential pkg-config
 
 ## Install Linux
 echo ':: Installing Linux...'
-apt install -y -t bookworm-backports linux-image-amd64 linux-headers-amd64 dkms
+case $DISTRO in
+    1) apt install -y -t "$DEBIAN_VERSION-backports" linux-image-amd64 linux-headers-amd64 dkms ;;
+    2) apt install -y -t "$UBUNTU_VERSION-backports" linux-image-generic linux-headers-generic dkms ;;
+esac
 
-## Install important but missing compression algorithm
-echo ':: Installing LZ4...'
-apt install -y lz4
-echo lz4 >> /etc/initramfs-tools/modules
+## Install systemd
+echo ':: Installing systemd...'
+apt install -y systemd
+hostnamectl set-hostname $(hostname) ## Just in case systemd knows of additional places it needs setting.
 
 ## Install and configure ZFS
 echo ':: Installing ZFS...'
-apt install -y -t bookworm-backports zfsutils-linux zfs-dkms
-# echo 'REMAKE_INITRD=yes' >> '/etc/dkms/zfs.conf' #NOTE: Needed on ZFS < 2.2, deprecated on ZFS >= 2.2
+case $DISTRO in
+    1) apt install -y -t "$DEBIAN_VERSION-backports" zfsutils-linux zfs-dkms ;;
+    2) apt install -y -t "$UBUNTU_VERSION-backports" zfsutils-linux ;;
+esac
+ZFS_VERSION="$(zfs --version | head -n1 | cut -c5-)"
+dpkg --compare-versions "$ZFS_VERSION" lt 2.2 && idempotent_append 'REMAKE_INITRD=yes' '/etc/dkms/zfs.conf' ## Needed on ZFS < 2.2, deprecated on ZFS >= 2.2
 mkdir -p '/etc/zfs/zfs-list.cache'
 touch "/etc/zfs/zfs-list.cache/$ENV_POOL_NAME_OS"
 # zed -F
-sed -Ei "s|$TARGET/?|/|" '/etc/zfs/zfs-list.cache/'*
+TARGET_ESCAPED=$(printf '%s\n' "$TARGET" | sed 's/[\/&]/\\&/g') #AI
+sed -Ei "s|$TARGET_ESCAPED/?|/|" '/etc/zfs/zfs-list.cache/'*
 systemctl enable zfs.target
 systemctl enable zfs-import-cache
 systemctl enable zfs-mount
@@ -130,15 +170,15 @@ systemctl enable zfs-import.target
 echo ':: Installing EFI bootloader...'
 mkdir -p /boot/esp
 apt install -y dosfstools mdadm
-# systemctl enable mdadm-raid
 read -p 'Run this command outside of chroot and paste the result: `$(lsblk -o uuid "/dev/md/$ENV_NAME_ESP" | tail -n 1)` ' ESP_UUID
 echo "UUID=$ESP_UUID /boot/esp vfat noatime,lazytime,nofail,x-systemd.device-timeout=5s,iocharset=utf8,umask=0022,fmask=0133,dmask=0022 0 0" > '/etc/fstab' #FIXME: `sync` causes writes to never finish?
 unset ESP_UUID
 mount /boot/esp
 apt install -y git
 cd /usr/local/src
-git clone 'https://github.com/zbm-dev/zfsbootmenu'
-cd zfsbootmenu
+REPO='zfsbootmenu'
+[[ ! -d "$REPO" ]] && git clone "https://github.com/zbm-dev/$REPO.git"
+cd "$REPO"
 cp -r ./etc/zfsbootmenu /etc/
 mkdir -p /etc/zfsbootmenu/generate-zbm.pre.d /etc/zfsbootmenu/generate-zbm.post.d /etc/zfsbootmenu/mkinitcpio.hooks.d
 cat > /etc/zfsbootmenu/config.yaml <<EOF
@@ -156,7 +196,7 @@ Global:
   PreHooksDir: /etc/zfsbootmenu/generate-zbm.pre.d
   PostHooksDir: /etc/zfsbootmenu/generate-zbm.post.d
 Kernel:
-  CommandLine: ro quiet loglevel=5 init_on_alloc=0 random.trust_cpu=off
+  CommandLine: ro quiet loglevel=5 init_on_alloc=0
 # Path: ''
 # Version: ''
 # Prefix: ''
@@ -172,7 +212,7 @@ EFI:
 # SplashImage: /etc/zfsbootmenu/splash.bmp
 # DeviceTree: ''
 EOF
-cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<'EOF'
+cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
 #!/bin/sh
 cd /boot/esp/EFI
 mkdir -p BOOT ZBM
@@ -190,24 +230,34 @@ apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort
 make core dracut
 generate-zbm
 cd "$CWD"
-KERNEL_COMMANDLINE="quiet loglevel=5"
-echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in your NVRAM, and sign your ZBM image with it.' >&2
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE quiet loglevel=5"
+echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in your NVRAM, and sign your ZBM image with it.' >&2 #TODO
 
 ## Set up ZFS in the initramfs
 echo ':: Configuring the initramfs to support ZFS...'
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE init_on_alloc=0" ## `=1` causes major performance issues for ZFS. `=0` used to be the default. The minor and theoretical security improvements are not worth this much of a performance hit, and they only set it to `=1` in the first place because on non-ZFS systems it does not substantially impact performance.
-apt install -y zfs-initramfs
+case $DISTRO in
+    1) apt install -y -t "$DEBIAN_VERSION-backports" zfs-initramfs ;;
+    2) apt install -y -t "$UBUNTU_VERSION-backports" zfs-initramfs ;;
+esac
 KEYDIR=/etc/zfs/keys
 chmod 700 "$KEYDIR"
 KEYFILE="$KEYDIR/$ENV_POOL_NAME_OS.key"
-touch "$KEYFILE"
-chmod 600 "$KEYFILE"
-read -p "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " FOO; unset FOO
-nano "$KEYFILE"
+if [[ ! -f "$KEYFILE" ]]; then
+    touch "$KEYFILE"
+    chmod 600 "$KEYFILE"
+    read -p "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " FOO; unset FOO
+    nano "$KEYFILE"
+fi
 zfs set keylocation=file://"$KEYFILE" "$ENV_POOL_NAME_OS"
 echo 'UMASK=0077' > /etc/initramfs-tools/conf.d/umask.conf
 echo "FILES=\"$KEYDIR/*\"" > /etc/initramfs-tools/conf.d/99-zfs-keys.conf
 unset KEYDIR KEYFILE
+
+## Install important but potentially missing compression algorithms and tooling
+echo ':: Installing compressiony things...'
+apt install -y gzip lz4 lzop unrar unzip zip zstd
+idempotent_append 'lz4' '/etc/initramfs-tools/modules'
 
 ## Prettify zpool display
 cat > /etc/zfs/vdev_id.conf <<EOF
@@ -238,25 +288,26 @@ echo 'Make sure to import your pools with `import -d /dev/disk/by-id`! Else, you
 ## ZFS does not provide properties for all of the mount options it supports. One such mount option is `lazytime`. So we have to specify it manually when mounting datasets.
 ## The default mount options include `relatime` and lack `lazytime`, which is bad for performance and longevity.
 ## A lot of system mounts explicitly declare `relatime` when nothing in them actually uses atimes.
+## Unfortunately, the only way to address some of these right now is via monkeypatching. C'est la vie.
 BASENAME=remount-options
 SCRIPT="/usr/local/sbin/.$BASENAME"
 
 SERVICE="/etc/systemd/system/$BASENAME-normal.service"
-cat > "$SERVICE" <<EOD
+cat > "$SERVICE" <<EOF
 [Unit]
 Description=Retroactively apply mount options to all non-zfs mounts.
 After=local-fs.target
-Requires=local-fs.target
+# Requires=local-fs.target
 [Service]
 Type=oneshot
 ExecStart=$SCRIPT mount
 [Install]
 WantedBy=multi-user.target
-EOD
+EOF
 systemctl enable "$SERVICE"
 
 SERVICE="/etc/systemd/system/$BASENAME-zfs.service"
-cat > "$SERVICE" <<EOD
+cat > "$SERVICE" <<EOF
 [Unit]
 Description=Retroactively apply mount options to all zfs mounts.
 After=zfs-mount.service
@@ -266,10 +317,10 @@ Type=oneshot
 ExecStart=$SCRIPT zfs
 [Install]
 WantedBy=multi-user.target
-EOD
+EOF
 systemctl enable "$SERVICE"
 
-cat > "$SCRIPT" <<'EOF'
+cat > "$SCRIPT" <<EOF
 #!/bin/sh
 AWK_SCRIPT='{ print $2, $4 }'
 [ "$1" = 'mount' ] && AWK_SCRIPT='$3!="zfs" '"$AWK_SCRIPT" ||\
@@ -294,14 +345,14 @@ EOF
 chmod 0755 "$SCRIPT"
 
 SCRIPT=/usr/local/sbin/mount
-cat > "$SCRIPT" <<'EOF'
+cat > "$SCRIPT" <<EOF
 #!/bin/sh
 exec /usr/bin/mount -o noatime,lazytime "$@"
 EOF
 chmod 0755 "$SCRIPT"
 
 SCRIPT=/usr/local/sbin/zfs
-cat > "$SCRIPT" <<'EOF'
+cat > "$SCRIPT" <<EOF
 #!/bin/sh
 [ "$1" != mount ] && exec /usr/sbin/zfs "$@"
 shift
@@ -315,7 +366,7 @@ unset BASENAME SCRIPT SERVICE
 echo ':: Configuring swap...'
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lzo" #NOTE: Fractional percents (eg, `12.5`) are not possible.
 apt install -y systemd-zram-generator
-cat > /etc/systemd/zram-generator.conf <<'EOF'
+cat > /etc/systemd/zram-generator.conf <<EOF
 [zram0]
 zram-size = "ram * 0.3333333"
 compression-algorithm = "zstd"
@@ -375,11 +426,9 @@ systemctl enable clamav-daemon
 systemctl enable clamav-freshclam
 systemctl enable systemd-oomd
 ## Niche
-apt install -y rasdaemon fail2ban nut-server
+apt install -y rasdaemon fail2ban
 systemctl enable fail2ban
 systemctl enable rasdaemon
-systemctl enable nut-server
-systemctl enable nut-monitor
 ## Follow-up
 systemctl mask systemd-coredump.socket systemd-coredump@.service
 
@@ -390,53 +439,26 @@ apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 ## General firmware tools
 apt install -y fwupd iasl
 ## General hardware tools
-apt install -y linux-tools-common linux-tools-$(uname -r) i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo # rng-tools-debian
+KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
+apt install -y linux-tools-common linux-tools-$KVER i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo
 sensors-detect --auto
-# systemctl enable rng-tools-debian
-## Specific firmware
-apt install -y amd64-microcode firmware-amd-graphics firmware-mellanox firmware-realtek
-## Specific drivers
-# apt install -y
-## Specific tools
-apt install -y ipmitool mstflint openseachest
-## Proprietary tools
-# install STORCLI MFT
-# systemctl enable mst
+
+## Upgrade firmware
+echo ':: Upgrading firmware...'
+set +e
+fwupdmgr refresh
+fwupdmgr get-updates && fwupdmgr update
+set -e
 
 ## Install applications
 echo ':: Installing applications...'
 ## Applications that need configuration
-tasksel --new-install
+[[ $DISTRO -eq 1 ]] && tasksel --new-install
 apt install -y popularity-contest
 ## Common applications
-apt install -y cups rsync unzip
+apt install -y cups rsync
 ## Niche applications
 # apt install -y # sanoid
-
-## More configuration
-echo ':: Additional configurations...'
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE page_alloc.shuffle=1"
-read -p 'Please enter your wireless regulatory domain: ('US' for the USA) ' REGDOM
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE cfg80211.ieee80211_regdom=$REGDOM"
-unset REGDOM
-
-## Set up TRNG
-echo ':: Set up TRNG...'
-#NOTE: This installs Debian's official version in order to pull in dependencies, and then overrides it with a locally-compiled version.
-apt install -y infnoise
-systemctl disable infnoise
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE random.trust_cpu=off" ## Should not use RDSEED/RDRAND when you have a trusted TRNG.
-## The one shipped with Debian as of 2025-06-12 (0.3.3) is missing a critical patch that tells that CPU to reseed. Without this, the extra entropy is mostly wasted.
-apt install -y libftdi-dev
-cd /usr/local/src
-git clone https://github.com/leetronics/infnoise.git
-cd infnoise/software
-make -f Makefile.linux
-make -f Makefile.linux install
-systemctl enable infnoise
-sed -i 's|^ExecStart=.*|ExecStart=/usr/local/sbin/infnoise --daemon --pidfile=/var/run/infnoise.pid --dev-random --feed-frequency=30 --reseed-crng|' /etc/systemd/system/infnoise.service ## The latest code does not utilize all of the arguments needed to properly utilize the TRNG with modern Linux kernels, so we have to write it out ourselves.
-systemctl daemon-reload
-systemctl start infnoise
 
 ## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
 echo ':: Tweaking various compression settings...'
@@ -460,8 +482,9 @@ bash ./configure-filesystem-hierarchy.bash
 # echo ':: Installing better bitmap font...'
 # FILE='/etc/default/console-setup'
 # cd /tmp
-# git clone https://github.com/sunaku/tamzen-font.git
-# cd tamzen-font/bdf
+# REPO='tamzen-font'
+# [[ ! -d "$REPO" ]] && git clone "https://github.com/sunaku/$REPO.git"
+# cd "$REPO/bdf"
 # apt install -y bdf2psf
 # mkdir psf
 # B2P='/usr/share/bdf2psf'
@@ -490,11 +513,9 @@ apt install -y openssh-server
 sed -Ei 's/^#?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 systemctl enable ssh
 
-## Configure CPU features
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE amd_iommu=on iommu=pt"
-cat > /etc/modprobe.d/kvm-amd.conf <<'EOF'
-options kvm-amd nested=1
-EOF
+## More configuration
+echo ':: Additional configurations...'
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE page_alloc.shuffle=1"
 
 ## Set kernel commandline
 echo ':: Setting kernel commandline...'
@@ -503,18 +524,23 @@ mkdir -p "$KERNEL_COMMANDLINE_DIR"
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 echo '#!/bin/sh' > "$KERNEL_COMMANDLINE_DIR/set-commandline"
 echo 'BOOTFS=$(zpool get -Ho value bootfs '"$ENV_POOL_NAME_OS"')' > "$KERNEL_COMMANDLINE_DIR/set-commandline"
-cat >> "$KERNEL_COMMANDLINE_DIR/set-commandline" <<'EOF'
+cat >> "$KERNEL_COMMANDLINE_DIR/set-commandline" <<EOF
 COMMANDLINE="$(cat /etc/zfsbootmenu/commandline/commandline.txt | xargs | tr ' ' '\n' | sort -V | uniq | tr '\n' ' ' && echo)"
 zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "$BOOTFS"
 zfs get org.zfsbootmenu:commandline "$BOOTFS"
 EOF
-unset KERNEL_COMMANDLINE_DIR
+export KERNEL_COMMANDLINE_DIR
 update-initramfs -u
 
 ## Wrap up
 echo ':: Creating snapshot...'
-zfs snapshot -r "$ENV_POOL_NAME_OS@install-debian"
+set +e
+zfs snapshot -r "$ENV_POOL_NAME_OS@install-$DISTRO"
+set -e
 
 ## Done
-echo ':: Done.'
-exit 0
+case "$HOSTNAME" in
+    'artemis') exec ./configure-artemis.bash ;;
+    'hephaestus') exec ./configure-hephaestus.bash ;;
+    *) echo ':: Done.' && exit 0 ;;
+esac
