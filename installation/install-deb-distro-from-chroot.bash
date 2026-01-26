@@ -516,19 +516,19 @@ echo "FILES=\"$KEYDIR/*\"" > /etc/initramfs-tools/conf.d/99-zfs-keys.conf
 unset KEYDIR KEYFILE
 
 ## Set up SecureBoot
+SBDIR='/etc/secureboot'
 if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
 
     ## Create SB keys
     echo ':: Generating SecureBoot keys...'
-    SBDIR='/etc/secureboot'
     install -m 755 -d "$SBDIR"
     cd "$SBDIR"
     install -m 755 -d 'auth' 'crt' 'esl' 'uuid'
     install -m 700 -d 'key'
     apt install -y sbsigntool efitools openssl
     declare -i TTL=3650
-    ALG_CLASS='rsa'
     declare -a ALG_PARAMS=()
+    ALG_CLASS='rsa'
     case "$ALG_CLASS" in
         rsa)  ALG_PARAMS=('-newkey' 'rsa:3072') ;; ## RSA-3072 is comparable to 128 symmetrical.
         pkey) ALG_PARAMS=('-newkey' 'ec' '-pkeyopt' 'ec_paramgen_curve:prime256v1' '-pkeyopt' 'ec_param_enc:named_curve') ;; ## NIST P-256 is comparable to 128 symmetrical.
@@ -541,6 +541,7 @@ if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
         chmod 0600 "key/$CERT.key"
         cert-to-efi-sig-list -g "$(cat "uuid/$CERT.uuid")" "crt/$CERT.crt"  "esl/$CERT.esl"
     done
+    unset ALG_CLASS ALG_PARAMS TTL
     sign-efi-sig-list -k "key/PK.key"  -c "crt/PK.crt"  PK  "esl/PK.esl"  "auth/PK.auth"
     sign-efi-sig-list -k "key/PK.key"  -c "crt/PK.crt"  KEK "esl/KEK.esl" "auth/KEK.auth"
     sign-efi-sig-list -k "key/KEK.key" -c "crt/KEK.crt" db  "esl/db.esl"  "auth/db.auth"
@@ -554,6 +555,7 @@ if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
         efi-updatevar -f "esl/$CERT.esl" "$CERT"
         efi-readvar -v "$CERT"
     done
+    unset CERTS
     echo "INFO: To update your BIOS's SecureBoot database, you will have to append to the 'DB.esl' file, sign it as a 'DB.auth' file, and run \`efi-updatevar -f $SBDIR/auth/db.auth db\`."
     cd "$CWD"
 else
