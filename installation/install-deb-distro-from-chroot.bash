@@ -280,12 +280,14 @@ case $DISTRO in
 esac
 ZFS_VERSION="$(zfs --version | head -n1 | cut -c5-)"
 dpkg --compare-versions "$ZFS_VERSION" lt 2.2 && idempotent_append 'REMAKE_INITRD=yes' '/etc/dkms/zfs.conf' ## Needed on ZFS < 2.2, deprecated on ZFS >= 2.2
+unset ZFS_VERSION
 mkdir -p '/etc/zfs/zfs-list.cache'
 touch "/etc/zfs/zfs-list.cache/$ENV_POOL_NAME_OS"
 # zed -F
 TARGET_ESCAPED=$(printf '%s\n' "$TARGET" | sed 's/[\/&]/\\&/g') #AI
 [[ -n "$TARGET_ESCAPED" ]] || exit 99
 sed -Ei "s|$TARGET_ESCAPED/?|/|" '/etc/zfs/zfs-list.cache/'*
+unset TARGET_ESCAPED
 systemctl enable zfs.target
 systemctl enable zfs-import-cache
 systemctl enable zfs-mount
@@ -443,6 +445,7 @@ cd /usr/local/src
 REPO='zfsbootmenu'
 [[ ! -d "$REPO" ]] && git clone "https://github.com/zbm-dev/$REPO.git"
 cd "$REPO"
+unset REPO
 cp -r ./etc/zfsbootmenu /etc/
 mkdir -p /etc/zfsbootmenu/generate-zbm.pre.d /etc/zfsbootmenu/generate-zbm.post.d /etc/zfsbootmenu/mkinitcpio.hooks.d
 ZBM_EFI_DIR="$ESP_DIR/EFI/ZBM"
@@ -481,12 +484,12 @@ cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
 #!/bin/sh
 cd "$ESP_DIR/EFI"
 mkdir -p BOOT ZBM
-SRC=$(ls -t1 ./ZBM | grep -i '.EFI$' | head -n 1)
-[ -z "$SRC" ] && exit 1
-SRC="ZBM/$SRC"
+SRC=\$(ls -t1 ./ZBM | grep -i '.EFI$' | head -n 1)
+[ -z "\$SRC" ] && exit 1
+SRC="ZBM/\$SRC"
 DEST='BOOT/BOOTX64.EFI'
-cp -fa "$SRC" "$DEST.new"
-mv -f "$DEST.new" "$DEST"
+cp -fa "\$SRC" "\$DEST.new"
+mv -f "\$DEST.new" "\$DEST"
 EOF; chmod +x /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh
 read -p "Don't let kexec-tools handle reboots by default; it is an unsupported scenario and results in a series of bugs. If you ever want to kexec into a small point-release kernel, explicitly request it. " FOO; unset FOO
 apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort-versions-perl libboolean-perl libyaml-pp-perl mbuffer systemd-boot-efi
@@ -634,6 +637,7 @@ apt install -y iasl
 ## General hardware tools
 KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
 apt install -y linux-tools-common linux-tools-$KVER i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo
+unset KVER
 sensors-detect --auto
 
 ## Install applications
@@ -755,6 +759,7 @@ if [[ -d "$VARKEEP_DIR" ]]; then
         fi
     done
 fi
+unset VARKEEP_DIR
 
 ##########################################################################################
 
