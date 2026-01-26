@@ -282,6 +282,7 @@ mkdir -p '/etc/zfs/zfs-list.cache'
 touch "/etc/zfs/zfs-list.cache/$ENV_POOL_NAME_OS"
 # zed -F
 TARGET_ESCAPED=$(printf '%s\n' "$TARGET" | sed 's/[\/&]/\\&/g') #AI
+[[ -n "$TARGET_ESCAPED" ]] || exit 99
 sed -Ei "s|$TARGET_ESCAPED/?|/|" '/etc/zfs/zfs-list.cache/'*
 systemctl enable zfs.target
 systemctl enable zfs-import-cache
