@@ -219,7 +219,7 @@ echo ':: Configuring swap...'
 ## With 50% dedication, a 1:2 ratio of zswap:zram keeps us close to the default values for each. That's 16.67% for zswap, and 33.33% for the zram.
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lz4" #NOTE: Fractional percents (eg, `12.5`) are not possible.
 apt install -y systemd-zram-generator
-cat > /etc/systemd/zram-generator.conf <<EOF
+cat > /etc/systemd/zram-generator.conf <<'EOF'
 ## zram swap
 [zram0]
 zram-size = ram / 3
@@ -257,13 +257,13 @@ echo ':: Configuring `/tmp`...'
 cp /usr/share/systemd/tmp.mount /etc/systemd/system/
 systemctl enable tmp.mount
 mkdir -p /etc/systemd/system/tmp.mount.d
-cat > /etc/systemd/system/tmp.mount.d/override.conf <<EOF
+cat > /etc/systemd/system/tmp.mount.d/override.conf <<'EOF'
 [Mount]
 Options=mode=1777,nosuid,nodev,size=5G,noatime
 ## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
 EOF
 mkdir -p /etc/systemd/system/console-setup.service.d
-cat > /etc/systemd/system/console-setup.service.d/override.conf <<EOF
+cat > /etc/systemd/system/console-setup.service.d/override.conf <<'EOF'
 [Unit]
 # Requires=tmp.mount
 After=tmp.mount
@@ -294,7 +294,7 @@ systemctl enable zfs-import.target
 
 ## Prettify zpool display
 echo ':: Prettifying zpool display...'
-cat > /etc/zfs/vdev_id.conf <<EOF
+cat > /etc/zfs/vdev_id.conf <<'EOF'
 ## ATA HDDs
 alias hdd ata-H*
 alias hdd ata-IC*
@@ -321,7 +321,7 @@ echo 'Make sure to import your pools with `import -d /dev/disk/by-id`! Else, you
 ## Configure trim/discard
 echo ':: Scheduling trim...'
 systemctl enable fstrim.timer ## Auto-trims everything in /etc/fstab
-cat > /etc/systemd/system/zfstrim.service <<EOF
+cat > /etc/systemd/system/zfstrim.service <<'EOF'
 [Unit]
 Description=Trim ZFS pools
 After=zfs.target
@@ -330,7 +330,7 @@ Type=oneshot
 ExecStart=/usr/sbin/zpool trim -a
 IOSchedulingClass=idle
 EOF
-cat > /etc/systemd/system/zfstrim.timer <<EOF
+cat > /etc/systemd/system/zfstrim.timer <<'EOF'
 [Unit]
 Description=Periodic ZFS trim
 [Timer]
@@ -383,7 +383,7 @@ WantedBy=multi-user.target
 EOF
 systemctl enable "$SERVICE"
 
-cat > "$SCRIPT" <<EOF
+cat > "$SCRIPT" <<'EOF'
 #!/bin/sh
 AWK_SCRIPT='{ print $2, $4 }'
 [ "$1" = 'mount' ] && AWK_SCRIPT='$3!="zfs" '"$AWK_SCRIPT" ||\
@@ -407,14 +407,14 @@ exit 0
 EOF; chmod 0755 "$SCRIPT"
 
 SCRIPT=/usr/local/sbin/mount
-cat > "$SCRIPT" <<EOF
+cat > "$SCRIPT" <<'EOF'
 #!/bin/sh
 exec /usr/bin/mount -o noatime,lazytime "$@"
 EOF; chmod 0755 "$SCRIPT"
 ## Note to code reviewers: `-o` can be passed multiple times, and later values override prior ones.
 
 SCRIPT=/usr/local/sbin/zfs
-cat > "$SCRIPT" <<EOF
+cat > "$SCRIPT" <<'EOF'
 #!/bin/sh
 [ "$1" != mount ] && exec /usr/sbin/zfs "$@"
 shift
@@ -445,7 +445,7 @@ REPO='zfsbootmenu'
 cd "$REPO"
 cp -r ./etc/zfsbootmenu /etc/
 mkdir -p /etc/zfsbootmenu/generate-zbm.pre.d /etc/zfsbootmenu/generate-zbm.post.d /etc/zfsbootmenu/mkinitcpio.hooks.d
-cat > /etc/zfsbootmenu/config.yaml <<EOF
+cat > /etc/zfsbootmenu/config.yaml <<'EOF'
 ## man 5 generate-zbm
 Global:
   ManageImages: true
@@ -476,7 +476,7 @@ EFI:
 # SplashImage: /etc/zfsbootmenu/splash.bmp
 # DeviceTree: ''
 EOF
-cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
+cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<'EOF'
 #!/bin/sh
 cd /boot/esp/EFI
 mkdir -p BOOT ZBM
@@ -567,7 +567,7 @@ echo ':: Configuring networking...'
 ## Configure WOL
 read -p 'Enter "y" to enable Wake-On-LAN, or "n" to leave it disabled. ' DO_IT
 if [[ "$DO_IT" == 'y' ]]; then
-    cat > /etc/udev/rules.d/99-wol.rules <<EOF
+    cat > /etc/udev/rules.d/99-wol.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="en*", RUN+="/usr/sbin/ethtool -s %k wol g"
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth*", RUN+="/usr/sbin/ethtool -s %k wol g"
 EOF
@@ -592,7 +592,7 @@ unset REGDOM
 read -p 'Enter "y" to disable Wi-Fi or "n" to leave it untouched. ' DO_IT
 if [[ "$DO_IT" == 'y' ]]; then
     apt install -y rfkill
-    cat > /etc/udev/rules.d/80-rfkill-wifi.rules <<EOF
+    cat > /etc/udev/rules.d/80-rfkill-wifi.rules <<'EOF'
 SUBSYSTEM=="rfkill", ATTR{type}=="wlan", ACTION=="add|change", RUN+="/usr/sbin/rfkill block wifi"
 EOF
 fi; unset DO_IT
@@ -687,7 +687,7 @@ unset FILE
 
 ## Limit log size
 mkdir -p /etc/systemd/journald.conf.d
-cat > /etc/systemd/journald.conf.d/max-size.conf <<EOF
+cat > /etc/systemd/journald.conf.d/max-size.conf <<'EOF'
 [Journal]
 Storage=persistent
 SystemMaxUse=256M
@@ -707,7 +707,7 @@ mkdir -p "$KERNEL_COMMANDLINE_DIR"
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 echo '#!/bin/sh' > "$KERNEL_COMMANDLINE_DIR/set-commandline"
 echo 'BOOTFS=$(zpool get -Ho value bootfs '"$ENV_POOL_NAME_OS"')' > "$KERNEL_COMMANDLINE_DIR/set-commandline"
-cat >> "$KERNEL_COMMANDLINE_DIR/set-commandline" <<EOF
+cat >> "$KERNEL_COMMANDLINE_DIR/set-commandline" <<'EOF'
 COMMANDLINE="$(cat /etc/zfsbootmenu/commandline/commandline.txt | xargs | tr ' ' '\n' | sort -V | uniq | tr '\n' ' ' && echo)"
 zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "$BOOTFS"
 zfs get org.zfsbootmenu:commandline "$BOOTFS"
