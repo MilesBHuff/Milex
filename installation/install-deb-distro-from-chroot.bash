@@ -567,7 +567,7 @@ echo ':: Configuring DKMS for SecureBoot...'
 ## Checking module signatures helps protect against the following: evil maid, root hack persistence, poisoned upstream package.
 ## #1 is eliminated by not storing the kernel in unencrypted /boot.
 ## #2 is, largely, too little too late — they already have root! And to get this kind of protection, I'd have to store the private key off-system, which would kill automation.
-## #3 is *virtually* eliminated by package integrity checks.
+## #3 is *virtually* eliminated by package integrity checks, and it requires using upstream signatures (which I'm explicitly not doing).
 ## Accordingly, in this situation, there is no meaningful benefit to enforcing module signatures.
 ## But we might as well do so anyway.
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE module.sig_enforce=1"
