@@ -41,6 +41,7 @@ chmod 644 "$FILE"
 #################
 ## QUEUE DEPTH ##
 #################
+zfs_vdev_queue_depth_pct=100 ## Default is 1000 (basically no cap). We carefully tune our queue depths, so we can go with 100.
 case "$ENV_NVME_QUEUE_REGIME" in
     'SATA')
         ## The ZFS settings here affect all devices, including NVMes; but I'm using my NVMes for L2ARC, which ZFS heavily rate-limits for longevity, so it shouldn't matter that we're limiting them to a SATA queue depth.
@@ -172,8 +173,18 @@ done
 ## MISCELLANEOUS CONFIGURATION ##
 #################################
 
-## Avoid contention between the SVDEV and the SLOG, which share a device and a sync domain.
-echo "options zfs zfs_immediate_write_sz=$((${ENV_THRESHOLD_SMALL_FILE%K} * 1024))" >> "$FILE"
+case "$ENV_NVME_QUEUE_REGIME" in
+    'NVMe')
+        echo 'NOTICE: You should run the following properties on your NVMe datasets: direct=always, logbias=throughput'
+        ## Skip the ZIL for everything
+        echo 'options zfs zfs_immediate_write_sz=0' >> "$FILE"
+        ;;
+    *)
+        ## Avoid contention between the SVDEV and the SLOG, which share a device and a sync domain.
+        echo "options zfs zfs_immediate_write_sz=$((${ENV_THRESHOLD_SMALL_FILE%K} * 1024))" >> "$FILE"
+        ;;
+esac
+
 ## TXG Tuning
 echo "options zfs zfs_txg_timeout=$ENV_SECONDS_DATA_LOSS_ACCEPTABLE" >> "$FILE"
 #echo "options zfs zfs_dirty_data_max=$(($ENV_SECONDS_DATA_LOSS_ACCEPTABLE * ($ENV_SPEED_MBPS_MAX_SLOWEST_HDD * (1024**2))))" >> "$FILE" ## Sanity check: Default is 4294967296 (4GiB) #NOTE: This is already auto-tuned every few seconds to accomplish the same goal.
