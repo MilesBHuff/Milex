@@ -268,6 +268,11 @@ After=tmp.mount
 EOF
 systemctl daemon-reload
 
+## Hibernation
+# echo ':: Configuring hibernation...'
+#TODO: Enable hibernation, provide a pre-hibernation hook that creates a swap zvol equal to the amount of system RAM, provide a post-hibernation-restore hook that deletes that zvol.
+#TODO: Configure NUT to trigger hibernation when the UPS is low on battery.
+
 ################################################################################
 ## ZFS
 ################################################################################
