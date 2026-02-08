@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: configure-hephaestus.bash"
+    echo "Usage: configure-morpheus.bash"
     echo
-    echo 'This one-shot script configures Ubuntu Server for AI inference on a Framework Desktop.'
+    echo 'This is a one-shot script that finishes setting up Morpheus (using Ubuntu) in a chroot.'
+    echo 'Morpheus is an AI inference server running on a maxed-out Framework Desktop.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
 set -euo pipefail
@@ -149,7 +150,7 @@ echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 ## Wrap up
 echo ':: Creating snapshot...'
 set +e
-zfs snapshot -r "$ENV_POOL_NAME_OS@install-hephaestus"
+zfs snapshot -r "$ENV_POOL_NAME_OS@install-morpheus"
 set -e
 
 ## Done

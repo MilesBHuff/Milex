@@ -856,6 +856,6 @@ set -e
 ## Done
 case "$HOSTNAME" in
     'aetherius') exec ./configure-aetherius.bash ;;
-    'hephaestus') exec ./configure-hephaestus.bash ;;
+    'morpheus') exec ./configure-morpheus.bash ;;
     *) echo ':: Done.' && exit 0 ;;
 esac
