@@ -79,6 +79,7 @@ vm.dirty_expire_centisecs=1500
 vm.dirty_bytes=1250000000
 vm.dirty_background_bytes=625000000
 EOF
+sysctl --system
 
 ## Set kernel commandline
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"

@@ -832,6 +832,7 @@ fs.protected_hardlinks = 1
 fs.protected_regular = 2
 fs.protected_symlinks = 1
 EOF
+sysctl --system
 
 ## Set kernel commandline
 echo ':: Setting kernel commandline...'
@@ -860,7 +861,6 @@ set -e
 
 ## Done
 case "$HOSTNAME" in
-    'aetherius') exec ./configure-aetherius.bash ;;
-    'morpheus') exec ./configure-morpheus.bash ;;
+    'aetherius'|'morpheus'|'duat') exec "./helpers/configure-$HOSTNAME.bash" ;;
     *) echo ':: Done.' && exit 0 ;;
 esac

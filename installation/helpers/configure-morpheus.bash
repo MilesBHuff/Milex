@@ -90,12 +90,6 @@ apt install -y python3-venv python3-pip
 echo ':: Setting up OCR...'
 apt install -y tesseract-ocr
 
-echo ':: Adjusting limits...'
-cat > /etc/sysctl.d/99-ai.conf <<EOF
-vm.max_map_count = 1048576
-EOF
-sysctl --system
-
 echo ':: Setting up Docker...'
 apt install -y docker.io
 systemctl enable docker
@@ -142,6 +136,10 @@ kernel.mm.ksm.sleep_millisecs=1000
 vm.dirty_writeback_centisecs=500
 vm.dirty_expire_centisecs=1500
 EOF
+cat > /etc/sysctl.d/99-ai.conf <<EOF
+vm.max_map_count = 1048576
+EOF
+sysctl --system
 
 ## Set kernel commandline
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
