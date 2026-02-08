@@ -72,10 +72,11 @@ apt install -y -t "$UBUNTU_VERSION-backports" openrgb
 
 ## Configure VM and VM-related networking
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE intel_iommu=on iommu=pt intremap=on pcie_acs_override=downstream,multifunction" #WARN: The second two flags here may not be necessary, but are included out of caution. Run `find /sys/kernel/iommu_groups/ -type l` without them to verify whether the NICs are properly isolated; if they are, then remove these flags.
+VMNET_ID='????'
 VNET_ID='vnet0'
-IF_ID='vnet'
+NM_VNET_ID='vnet'
 OPNSENSE_ISO='/root/Downloads/OPNsense.iso'
-VDISK="$ENV_POOL_NAME_OS/data/srv/opnsense"
+VDISK="$ENV_POOL_NAME_OS/data/srv/anubis"
 declare -i MEMORY=8192 ## Leaves 8192 for the host. (We're swimming in RAM; neither will ever need as much as they have.)
 declare -i STORAGE=96 ## In gigabytes. Make sure you leave enough for the host to be cozy.
 declare -i CORES=$(nproc) ## While it may seem nice to reserve 1 CPU entirely for the host, I don't think that's worth removing 25% of the guest's cores.
@@ -87,10 +88,10 @@ virt-install \
     --name anubis \
     --memory $MEMORY \
     --vcpus $CORES \
+    --network network="$VMNET_ID",model=virtio \
     --disk path="/dev/zvol/$VDISK",format=raw,bus=virtio,discard=unmap \
-    --os-variant freebsd13.2 \
     --cdrom "$OPNSENSE_ISO" \
-    --network network="$IF_ID",model=virtio \
+    --os-variant freebsd13.2 \
     --graphics none \
     --console pty,target_type=serial \
     --cpu host-passthrough ## Needed to ensure features like AES-NI function optimally.
@@ -102,13 +103,13 @@ virt-install \
 apt install -y nftables
 systemctl enable nftables
 ## Configure $VNET_ID in NM
-nmcli con add type ethernet ifname "$VNET_ID" con-name "$IF_ID" \
+nmcli con add type ethernet ifname "$VNET_ID" con-name "$NM_VNET_ID" \
     ipv4.method auto \
     ipv6.method auto \
     ipv4.never-default no \
     ipv6.never-default no \
     connection.autoconnect yes
-nmcli con up "$IF_ID"
+nmcli con up "$NM_VNET_ID"
 ## Tell NM not to manage physical NICs
 cat > /etc/NetworkManager/conf.d/99-only-manage-virtio-net.conf <<'EOF'
 [keyfile]
