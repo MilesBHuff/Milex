@@ -59,14 +59,14 @@ set +e
 
 ## Configure datasets
 zfs set com.sun:auto-snapshot=false "$ENV_POOL_NAME_OS/data/var"
-zpool set bootfs="$ENV_POOL_NAME_OS/OS/debian" "$ENV_POOL_NAME_OS"
+zpool set bootfs="$ENV_POOL_NAME_OS/OS/linux" "$ENV_POOL_NAME_OS"
 
 ## Ensure that `/etc/zfs/zpool.cache` exists and that everything is mounted.
 if [[ ! -f '/etc/zfs/zpool.cache' ]]; then
     zpool export -f "$ENV_POOL_NAME_OS"
     zpool import -d /dev/disk/by-id -R "$ENV_ZFS_ROOT/$ENV_POOL_NAME_OS" -N "$ENV_POOL_NAME_OS"
     zfs load-key "$ENV_POOL_NAME_OS"
-    zfs mount "$ENV_POOL_NAME_OS/OS/debian"
+    zfs mount "$ENV_POOL_NAME_OS/OS/linux"
     zfs mount "$ENV_POOL_NAME_OS/data/var"
     zfs mount "$ENV_POOL_NAME_OS/data/srv"
     zfs mount "$ENV_POOL_NAME_OS/data/home"
