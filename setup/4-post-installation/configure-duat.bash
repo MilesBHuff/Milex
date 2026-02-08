@@ -50,10 +50,6 @@ KERNEL_COMMANDLINE="$(xargs < "$KERNEL_COMMANDLINE_DIR/commandline.txt")"
 ## INITIAL CONFIG                                                                       ##
 ##########################################################################################
 
-echo ':: Installing Ubuntu Server...'
-# apt install -y ubuntu-server-minimal
-apt install -y ubuntu-server
-
 echo ':: Switching to NetworkManager from networkd...'
 apt install -y networkmanager ## Just to be safe; should have already installed with the above.
 mkdir -p /etc/netplan ## Just to be safe.
@@ -218,7 +214,7 @@ sysctl --system
 
 ## Set kernel commandline
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
-"$KERNEL_COMMANDLINE_DIR/set-commandline"
+"$KERNEL_COMMANDLINE_DIR/set-commandline" ## Sorts, deduplicates, and saves the new commandline.
 update-initramfs -u
 
 ##########################################################################################

@@ -36,10 +36,6 @@ fi
 ## Variables
 KERNEL_COMMANDLINE="$(xargs < "$KERNEL_COMMANDLINE_DIR/commandline.txt")"
 
-echo ':: Installing Ubuntu Server...'
-# apt install -y ubuntu-server-minimal
-apt install -y ubuntu-server
-
 echo ':: Installing DE...'
 apt install -y ubuntu-desktop-minimal
 
@@ -145,7 +141,7 @@ sysctl --system
 
 ## Set kernel commandline
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
-"$KERNEL_COMMANDLINE_DIR/set-commandline"
+"$KERNEL_COMMANDLINE_DIR/set-commandline" ## Sorts, deduplicates, and saves the new commandline.
 update-initramfs -u
 
 ## Wrap up

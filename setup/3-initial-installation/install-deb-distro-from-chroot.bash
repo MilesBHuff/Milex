@@ -614,6 +614,16 @@ sbverify --list /boot/esp/EFI/ZBM/*.EFI
 sbverify --list /boot/esp/EFI/BOOT/BOOTX64.EFI
 
 ##########################################################################################
+## BASE SYSTEM                                                                          ##
+##########################################################################################
+
+case "$HOSTNAME" in
+    'aetherius') ;; #TODO: Do we need to install a Debian equivalent to `ubuntu-server` here?
+    'morpheus'|'duat') apt install -y ubuntu-server ;;
+    *) echo "WARN: Unsupported hostname: '$HOSTNAME'" ;;
+esac
+
+##########################################################################################
 ## PACKAGES                                                                             ##
 ##########################################################################################
 
