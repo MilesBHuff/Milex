@@ -8,6 +8,28 @@ function helptext {
 ## Special thanks to ChatGPT for helping with my endless questions.
 set -euo pipefail
 
+## Get environment
+ENV_FILE='../../env.sh'
+if [[ -f "$ENV_FILE" ]]; then
+    source "$ENV_FILE"
+else
+    echo "ERROR: Missing '$ENV_FILE'." >&2
+    exit 2
+fi
+if [[
+    -z "$ENV_POOL_NAME_OS"
+]]; then
+    echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
+    exit 3
+fi
+if [[
+    -z "$KERNEL_COMMANDLINE_DIR" ||\
+    -z "$DEBIAN_VERSION"
+]]; then
+    echo "ERROR: This script is designed to be executed by \`install-deb-distro-from-chroot.bash\`." >&2
+    exit 4
+fi
+
 ## Variables
 KERNEL_COMMANDLINE="$(cat "$KERNEL_COMMANDLINE_DIR/commandline.txt" | xargs)"
 
