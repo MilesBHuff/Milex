@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+################################################################################
+## META                                                                       ##
+################################################################################
+
 function helptext {
     echo "Usage: configure-duat.bash"
     echo
@@ -7,7 +13,10 @@ function helptext {
     echo 'It runs on a BeeLink with an Intel N100, a 128G RAID1 array of two single-lane NVMes, and 16G of non-ECC DDR5 SODIMM memory.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
-set -euo pipefail
+
+################################################################################
+## ENVIRONMENT                                                                ##
+################################################################################
 
 ## Get environment
 ENV_FILE='../../env.sh'
@@ -36,6 +45,10 @@ fi
 
 ## Variables
 KERNEL_COMMANDLINE="$(xargs < "$KERNEL_COMMANDLINE_DIR/commandline.txt")"
+
+##########################################################################################
+## INITIAL CONFIG                                                                       ##
+##########################################################################################
 
 echo ':: Installing Ubuntu Server...'
 # apt install -y ubuntu-server-minimal
@@ -67,88 +80,125 @@ apt install -y nut-client
 systemctl enable nut-client
 ## Drivers
 apt install -y intel-microcode firmware-intel-graphics firmware-realtek
-## Controllers
-apt install -y -t "$UBUNTU_VERSION-backports" openrgb
 
-## Configure VM and VM-related networking
+##########################################################################################
+## CONFIGURE VM + NETWORKING                                                            ##
+##########################################################################################
+
+## Requisite kernel commandline flags
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE intel_iommu=on iommu=pt intremap=on pcie_acs_override=downstream,multifunction" #WARN: The second two flags here may not be necessary, but are included out of caution. Run `find /sys/kernel/iommu_groups/ -type l` without them to verify whether the NICs are properly isolated; if they are, then remove these flags.
-VMNET_ID='????'
-VNET_ID='vnet0'
-NM_VNET_ID='vnet'
-OPNSENSE_ISO='/root/Downloads/OPNsense.iso'
-VDISK="$ENV_POOL_NAME_OS/data/srv/anubis"
-declare -i MEMORY=8192 ## Leaves 8192 for the host. (We're swimming in RAM; neither will ever need as much as they have.)
-declare -i STORAGE=96 ## In gigabytes. Make sure you leave enough for the host to be cozy.
-declare -i CORES=$(nproc) ## While it may seem nice to reserve 1 CPU entirely for the host, I don't think that's worth removing 25% of the guest's cores.
-declare -i VOLBLOCKSIZE=4 ## `4` avoids RMW in exchange for more metadata. We are neither storage-limited nor memory-limited in this appliance, so this is the right value.
-## Create zvol for VM
-zfs create -V "${STORAGE}G" -o volblocksize="${VOLBLOCKSIZE}K" -o volmode=dev "$VDISK"
-## Create VM for OPNsense
-virt-install \
-    --name anubis \
-    --memory $MEMORY \
-    --vcpus $CORES \
-    --network network="$VMNET_ID",model=virtio \
-    --disk path="/dev/zvol/$VDISK",format=raw,bus=virtio,discard=unmap \
-    --cdrom "$OPNSENSE_ISO" \
-    --os-variant freebsd13.2 \
-    --graphics none \
-    --console pty,target_type=serial \
-    --cpu host-passthrough ## Needed to ensure features like AES-NI function optimally.
-## Create $VNET_ID as virtio-net interface
-#TODO
-## Start VM on boot, before NetworkManager comes up
-#TODO
+
 ## Install prerequisites before we mess with networking
-apt install -y nftables
-systemctl enable nftables
-## Configure $VNET_ID in NM
-nmcli con add type ethernet ifname "$VNET_ID" con-name "$NM_VNET_ID" \
-    ipv4.method auto \
-    ipv6.method auto \
-    ipv4.never-default no \
-    ipv6.never-default no \
-    connection.autoconnect yes
-nmcli con up "$NM_VNET_ID"
-## Tell NM not to manage physical NICs
-cat > /etc/NetworkManager/conf.d/99-only-manage-virtio-net.conf <<'EOF'
+apt install -y nftables qemu-kvm libvirt-daemon-system libvirt-clients virtinst ovmf bridge-utils
+
+## Load vfio stuff early in boot
+idempotent_append 'vfio' '/etc/initramfs-tools/modules'
+idempotent_append 'vfio_pci' '/etc/initramfs-tools/modules'
+idempotent_append 'vfio_iommu_type1' '/etc/initramfs-tools/modules'
+echo vfio-pci > /etc/modules-load.d/vfio-pci.conf
+
+## Find all local network interfaces
+mapfile -t PCI_ADDRS < <(lspci -Dn | awk '$2 ~ /^02/ { print $1 }') #AI
+BR_ID='br-anubis'
+
+## Configure physical NICs for passthrough
+cat > /etc/udev/rules.d/99-nic-passthrough.rules <<'EOF' #TODO: Have this only passthrough $PCI_ADDRS
+SUBSYSTEM=="pci", ATTR{class}=="0x020000", ATTR{driver_override}="vfio-pci"
+SUBSYSTEM=="pci", ATTR{class}=="0x028000", ATTR{driver_override}="vfio-pci"
+EOF
+
+## Tell NM not to manage what we are virtualizing
+cat > /etc/NetworkManager/conf.d/99-unmanage-physical-interfaces.conf <<'EOF' #TODO: Have this only unmanage $PCI_ADDRS
 [keyfile]
 unmanaged-devices=interface-name:en*,interface-name:wl*
 EOF
 systemctl restart NetworkManager
-## Use a firewall rule to make extra-sure that host does not use its physical ports
-cat > /etc/nftables.conf <<EOF
+
+## Use a firewall rule to ensure the host does not use the passed-through interfaces.
+cat > /etc/nftables.conf <<EOF #AI
 #!/usr/sbin/nft -f
 flush ruleset
 table inet filter {
     chain input {
         type filter hook input priority 0;
-        policy accept;
+        policy drop;
+        ct state established,related accept
+        iifname "lo" accept
+        iifname "$BR_ID" tcp dport 22 accept
+        iifname "$BR_ID" ip protocol icmp accept
+        iifname "$BR_ID" ip6 nexthdr icmpv6 accept
+    }
+    chain output {
+        type filter hook output priority 0;
+        policy drop;
+        ct state established,related accept
+        oifname "lo" accept
+        oifname "$BR_ID" accept
     }
     chain forward {
         type filter hook forward priority 0;
         policy drop;
     }
-    chain output {
-        type filter hook output priority 0;
-        policy drop;
-        oifname "lo" accept
-        oifname "$VNET_ID" accept
-    }
 }
 EOF
-systemctl start nftables
-## Configure physical NICs for passthrough #WARN: FreeBSD Wi-Fi support is... *spotty*, to say the least.
-cat > /etc/udev/rules.d/99-nic-passthrough.rules <<'EOF'
-SUBSYSTEM=="pci", ATTR{class}=="0x020000", ATTR{driver_override}="vfio-pci"
-SUBSYSTEM=="pci", ATTR{class}=="0x028000", ATTR{driver_override}="vfio-pci"
+systemctl enable --now nftables
+
+## Create virtual network interface so that host can conect via guest.
+nmcli con add type bridge ifname "$BR_ID" con-name "$BR_ID" \
+    ipv4.method auto \
+    ipv6.method auto \
+    ipv4.never-default no \
+    ipv6.never-default no \
+    connection.autoconnect yes
+nmcli con up "$BR_ID"
+
+## Create zvol for VM
+VDISK="$ENV_POOL_NAME_OS/data/srv/anubis"
+if ! zfs list -Ho name "$VDISK" >/dev/null 2>&1; then
+    declare -i STORAGE=96 ## In gigabytes. Make sure you leave enough for the host to be cozy.
+    declare -i VOLBLOCKSIZE=4 ## `4` avoids RMW in exchange for more metadata. We are neither storage-limited nor memory-limited in this appliance, so this is the right value.
+    zfs create -V "${STORAGE}G" -o volblocksize="${VOLBLOCKSIZE}K" -o volmode=dev "$VDISK"
+fi
+
+## Create VM for OPNsense
+declare -a HOSTDEV_ARGS=()
+for PCI_ADDR in "${PCI_ADDRS[@]}"; do
+    HOSTDEV_ARGS+=('--hostdev' "$PCI_ADDR")
+done
+declare -i MEMORY=8192 ## Leaves 8192 for the host. (We're swimming in RAM; neither will ever need as much as they have.)
+declare -i CORES=$(nproc) ## While it may seem nice to reserve 1 CPU entirely for the host, I don't think that's worth removing 25% of the guest's cores.
+FREEBSD_VERSION='freebsd14'
+OPNSENSE_ISO='/root/Downloads/OPNsense.iso'
+virt-install \
+    --name anubis \
+    --memory $MEMORY \
+    --vcpus $CORES \
+    --network bridge="$BR_ID",model=virtio \
+    --disk path="/dev/zvol/$VDISK",format=raw,bus=virtio,discard=unmap \
+    --cdrom "$OPNSENSE_ISO" \
+    --osinfo "$FREEBSD_VERSION" \
+    --graphics none \
+    --console pty,target_type=serial \
+    --boot uefi \
+    "${HOSTDEV_ARGS[@]}" \
+    --cpu host-passthrough ## Needed to ensure features like AES-NI function optimally.
+
+## Start VM automatically
+virsh autostart anubis
+systemctl enable --now libvirtd
+systemctl enable --now libvirt-guests
+
+## Ensure VM comes up before NetworkManager, since NM depends on it
+mkdir -p /etc/systemd/system/NetworkManager.service.d
+cat > /etc/systemd/system/NetworkManager.service.d/10-libvirt-first.conf <<'EOF'
+[Unit]
+After=libvirtd.service libvirt-guests.service
+Requires=libvirtd.service
 EOF
-## Load vfio-pci EARLY in boot
-echo vfio-pci > /etc/modules-load.d/vfio-pci.conf
-idempotent_append 'vfio' '/etc/initramfs-tools/modules'
-idempotent_append 'vfio_pci' '/etc/initramfs-tools/modules'
-idempotent_append 'vfio_iommu_type1' '/etc/initramfs-tools/modules'
-#TODO: Make sure that USB NICs will still work normally; I want the option of plugging one in.
+
+##########################################################################################
+## ADDITIONAL CONFIGURATION                                                             ##
+##########################################################################################
 
 ## Sysctl
 echo ':: Configuring sysctl...'
@@ -170,6 +220,10 @@ sysctl --system
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 "$KERNEL_COMMANDLINE_DIR/set-commandline"
 update-initramfs -u
+
+##########################################################################################
+## OUTRO                                                                                ##
+##########################################################################################
 
 ## Wrap up
 echo ':: Creating snapshot...'
