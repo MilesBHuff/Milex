@@ -11,6 +11,13 @@ function helptext {
     echo 'This is a one-shot script that finishes setting up Duat (using Ubuntu).'
     echo 'Duat is the host for Anubis, an OPNsense guest VM acting as a firewall and edge router.'
     echo 'It runs on a BeeLink with an Intel N100, a 128G RAID1 array of two single-lane NVMes, and 16G of non-ECC DDR5 SODIMM memory.'
+    echo
+    echo 'You must run this in-person via keyboard+display because it *will* break networking.'
+    echo 'If the VM ever goes down, you will have to be physically present to fix things; there is no simple+safe way to expose ssh to this host over WAN.'
+    echo '(Note that this physical access requirement is no different than what would exist were we running OPNsense on bare metal.)'
+    echo
+    echo 'Why bother? Well, Linux can do all of the following where FreeBSD either struggles or simply can’t: TPM, SecureBoot, ZFSBootManager, optimal hardware support, latest microcode, firmware updates.'
+    echo 'Running OPNsense in a VM on a Linux host gives us the best of all worlds. Yes, it adds some complexity, but it removes other complexities and provides a level of security that just isn’t possible with a bare-metal BSD system.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
 
@@ -74,7 +81,7 @@ systemctl start NetworkManager
 netplan apply
 systemctl enable NetworkManager
 systemctl disable systemd-networkd
-# systemctl mask systemd-networkd
+# systemctl mask systemd-networkd #TODO: Do we want this masked?
 # apt purge systemd-networkd ## Also removes the `ubuntu-server` metapackage, which is not a desirable outcome.
 
 echo ':: Disabling Wi-Fi...'
@@ -89,11 +96,30 @@ systemctl enable nut-client
 apt install -y intel-microcode firmware-intel-graphics firmware-realtek
 
 ##########################################################################################
-## CONFIGURE VM + NETWORKING                                                            ##
+## TPM                                                                                  ##
 ##########################################################################################
 
+#TODO: Set up auto-unlock via TPM — an edge router that requires manual intervention on every boot is not a good edge router.
+
+##########################################################################################
+## CONFIGURE VM + NETWORKING                                                            ##
+##########################################################################################
+echo ':: Configuring virtualization and networking...'
+## The networking goal is to passthrough to the guest all physical Ethernet interfaces that are present during this installer.
+## Wi-Fi is not passed-through; FreeBSD has poor support for it. Also, I simply don't intend for this box to ever handle Wi-Fi.
+## That said, if I ever do decide to do Wi-Fi here, it would likely be via a second VM running OpenWRT — not via the OPNsense VM.
+## Because only present-at-install-time Ethernet interfaces are passed-through, a USB interface can later be added as a way for the host to get a real management interface.
+read -rp 'Please ensure any Ethernet interfaces you want the host to own are not plugged-into the system. Press "Enter" to continue when ready. ' FOO; unset FOO
+
 ## Requisite kernel commandline flags
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE intel_iommu=on iommu=pt intremap=on pcie_acs_override=downstream,multifunction" #WARN: The second two flags here may not be necessary, but are included out of caution. Run `find /sys/kernel/iommu_groups/ -type l` without them to verify whether the NICs are properly isolated; if they are, then remove these flags.
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE intel_iommu=on iommu=pt" ## PT is fine, since guest compromise makes the host useless anyway. The CPU is weak-enough that we need the extra performance.
+echo 'IOMMU Groups: '
+find /sys/kernel/iommu_groups/ -type l
+read -rp 'Enter "n" if the Ethernet interfaces are not sufficiently isolated, or "y" if they are. ' ISOLATED
+if [[ "$ISOLATED" == 'n' ]]; then
+    KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE pcie_acs_override=downstream,multifunction"
+    echo 'WARN: Lying about real IOMMU groupings to the kernel to permit network interface passthrough. This will reduce security!' >&2 ## Should be fine given that this is a single-VM appliance — pwning the host isn't much worse than pwning the guest.
+fi
 
 ## Install prerequisites before we mess with networking
 apt install -y nftables qemu-kvm libvirt-daemon-system libvirt-clients virtinst ovmf bridge-utils
@@ -102,26 +128,34 @@ apt install -y nftables qemu-kvm libvirt-daemon-system libvirt-clients virtinst 
 idempotent_append 'vfio' '/etc/initramfs-tools/modules'
 idempotent_append 'vfio_pci' '/etc/initramfs-tools/modules'
 idempotent_append 'vfio_iommu_type1' '/etc/initramfs-tools/modules'
-echo vfio-pci > /etc/modules-load.d/vfio-pci.conf
+update-initramfs -u
 
-## Find all local network interfaces
-mapfile -t PCI_ADDRS < <(lspci -Dn | awk '$2 ~ /^02/ { print $1 }') #AI
+## Find all local Ethernet interfaces
+mapfile -t PCI_ADDRS < <( lspci -Dn | awk '$2 ~ /^0200$/ { print $1 }' ) #AI
+mapfile -t IF_MACS < <( nmcli -t -f DEVICE,TYPE,GENERAL.HWADDR device | awk -F: '$2=="ethernet" && $3!="" { print tolower($3) }' ) #AI
 BR_ID='br-anubis'
 
-## Configure physical NICs for passthrough
-cat > /etc/udev/rules.d/99-nic-passthrough.rules <<'EOF' #TODO: Have this only passthrough $PCI_ADDRS
-SUBSYSTEM=="pci", ATTR{class}=="0x020000", ATTR{driver_override}="vfio-pci"
-SUBSYSTEM=="pci", ATTR{class}=="0x028000", ATTR{driver_override}="vfio-pci"
-EOF
+## Configure Ethernet for passthrough
+{ for PCI_ADDR in "${PCI_ADDRS[@]}"; do
+    echo "SUBSYSTEM==\"pci\", KERNELS==\"0000:${PCI_ADDR}\", ATTR{driver_override}=\"vfio-pci\""
+done } > /etc/udev/rules.d/99-nic-passthrough.rules
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=pci
 
 ## Tell NM not to manage what we are virtualizing
-cat > /etc/NetworkManager/conf.d/99-unmanage-physical-interfaces.conf <<'EOF' #TODO: Have this only unmanage $PCI_ADDRS
+UNMANAGED_DEVICES=''
+for IF_NAME in "${IF_MACS[@]}"; do
+    [[ -n "$UNMANAGED_DEVICES" ]] && UNMANAGED_DEVICES+=';'
+    UNMANAGED_DEVICES+="mac:$IF_NAME"
+done
+cat > /etc/NetworkManager/conf.d/99-unmanage-ethernet.conf <<EOF
 [keyfile]
-unmanaged-devices=interface-name:en*,interface-name:wl*
+unmanaged-devices=$UNMANAGED_DEVICES
 EOF
 systemctl restart NetworkManager
 
 ## Use a firewall rule to ensure the host does not use the passed-through interfaces.
+#TODO: Maybe make it so that this supports later-inserted USB Ethernet interfaces.
 cat > /etc/nftables.conf <<EOF #AI
 #!/usr/sbin/nft -f
 flush ruleset
@@ -129,15 +163,17 @@ table inet filter {
     chain input {
         type filter hook input priority 0;
         policy drop;
-        ct state established,related accept
         iifname "lo" accept
+        ct state established,related accept
+        iifname "$BR_ID" udp sport 67 udp dport 68 accept
+        oifname "$BR_ID" udp sport 68 udp dport 67 accept
         iifname "$BR_ID" tcp dport 22 accept
         iifname "$BR_ID" ip protocol icmp accept
         iifname "$BR_ID" ip6 nexthdr icmpv6 accept
     }
     chain output {
         type filter hook output priority 0;
-        policy drop;
+        policy reject;
         ct state established,related accept
         oifname "lo" accept
         oifname "$BR_ID" accept
@@ -150,20 +186,25 @@ table inet filter {
 EOF
 systemctl enable --now nftables
 
-## Create virtual network interface so that host can conect via guest.
+## Create virtual network interface so that the host can conect via the guest.
 nmcli con add type bridge ifname "$BR_ID" con-name "$BR_ID" \
     ipv4.method auto \
     ipv6.method auto \
     ipv4.never-default no \
     ipv6.never-default no \
-    connection.autoconnect yes
+    ipv4.may-fail no \
+    ipv6.may-fail no \
+    connection.autoconnect yes \
+    autoconnect-priority 10 \
+    connection.autoconnect-retries -1
 nmcli con up "$BR_ID"
 
-## Create zvol for VM
-VDISK="$ENV_POOL_NAME_OS/data/srv/anubis"
+## Create a zvol for the VM.
+ANUBIS_DIR='/srv/anubis'
+VDISK="$ENV_POOL_NAME_OS/data$ANUBIS_DIR/zvol"
 if ! zfs list -Ho name "$VDISK" >/dev/null 2>&1; then
     declare -i STORAGE=96 ## In gigabytes. Make sure you leave enough for the host to be cozy.
-    declare -i VOLBLOCKSIZE=4 ## `4` avoids RMW in exchange for more metadata. We are neither storage-limited nor memory-limited in this appliance, so this is the right value.
+    declare -i VOLBLOCKSIZE=4 ## `4` matches ashift=12 and so avoids RMW in exchange for more metadata. We are neither storage-limited nor memory-limited in this appliance, so this is the right value.
     zfs create -V "${STORAGE}G" -o volblocksize="${VOLBLOCKSIZE}K" -o volmode=dev "$VDISK"
 fi
 
@@ -173,15 +214,22 @@ for PCI_ADDR in "${PCI_ADDRS[@]}"; do
     HOSTDEV_ARGS+=('--hostdev' "$PCI_ADDR")
 done
 declare -i MEMORY=8192 ## Leaves 8192 for the host. (We're swimming in RAM; neither will ever need as much as they have.)
-declare -i CORES=$(nproc) ## While it may seem nice to reserve 1 CPU entirely for the host, I don't think that's worth removing 25% of the guest's cores.
+declare -i SHARES=512 ## Host should be 1024. 1024/512==2, so host threads should have twice the priority of guest tasks under contention.
+declare -i CORES=$(nproc) ## The guest needs access to all 4; firewalling can be demanding. SHARES is how we're avoiding guest spikes from locking up the host.
 FREEBSD_VERSION='freebsd14'
-OPNSENSE_ISO='/root/Downloads/OPNsense.iso'
+OPNSENSE_ISO="$ANUBIS_DIR/OPNsense.iso"
+if [[ ! -f "$OPNSENSE_ISO" ]]; then
+    echo "Please place an OPNsense installation ISO at '$OPNSENSE_ISO'." >&2
+    exit 5
+fi
 virt-install \
     --name anubis \
+    --memballoon none \
     --memory $MEMORY \
     --vcpus $CORES \
+    --cputune shares=$SHARES \
     --network bridge="$BR_ID",model=virtio \
-    --disk path="/dev/zvol/$VDISK",format=raw,bus=virtio,discard=unmap \
+    --disk path="/dev/zvol/$VDISK",format=raw,bus=virtio,cache=none,discard=unmap \
     --cdrom "$OPNSENSE_ISO" \
     --osinfo "$FREEBSD_VERSION" \
     --graphics none \
@@ -189,18 +237,23 @@ virt-install \
     --boot uefi \
     "${HOSTDEV_ARGS[@]}" \
     --cpu host-passthrough ## Needed to ensure features like AES-NI function optimally.
+echo 'It is now safe to connect any Ethernet interfaces you want the host to own.'
+echo 'In the OPNsense installer’s partitioner, please configure a GUID partition table, an EFI system partition, and a UFS root partition. (Do not use ZFS.)'
+read -rp 'Press "Enter" to install OPNsense inside the VM. To exit, shut the VM down. ' FOO; unset FOO
+virsh console anubis
 
 ## Start VM automatically
 virsh autostart anubis
 systemctl enable --now libvirtd
 systemctl enable --now libvirt-guests
 
-## Ensure VM comes up before NetworkManager, since NM depends on it
+## Ensure VM comes up before NetworkManager — NM's depending on the VM means there's no point in allowing NM to load sooner.
+## Note that NM will still repeatedly fail to connect during the time it takes for the guest to boot; this dependency here just reduces how many failures appear in the log.
 mkdir -p /etc/systemd/system/NetworkManager.service.d
 cat > /etc/systemd/system/NetworkManager.service.d/10-libvirt-first.conf <<'EOF'
 [Unit]
 After=libvirtd.service libvirt-guests.service
-Requires=libvirtd.service
+Wants=libvirtd.service
 EOF
 
 ##########################################################################################
