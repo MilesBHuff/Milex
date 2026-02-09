@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
+## This script installs STORCLI on Ubuntu and Debian.
+
 CWD=$(pwd)
 trap 'cd "$CWD"' EXIT
-set -e
+set -euo pipefail
 cd $(dirname "$0")
 
-echo && echo ':: Importing public key...'
+echo && echo ':: Checking validity...'
+export GNUPGHOME=$(mktemp -d)
 gpg --import pubKey.asc
-echo && echo ':: Checking signature...'
 gpg --verify storcli*.deb.sig storcli*.deb
+rm -rf "$GNUPGHOME"
+unset GPUPGHOME
 
 echo && echo ':: Installing...'
 sudo dpkg -i storcli*.deb
@@ -26,6 +30,7 @@ sudo cp   -fv '../storcli' "$STORCLI_ALIAS_PATH"
 sudo chown -v root:root    "$STORCLI_ALIAS_PATH"
 sudo chmod -v 755          "$STORCLI_ALIAS_PATH"
 
+unset STORCLI_PATH STORCLI_INI_PATH STORCLI_ALIAS_PATH
 echo && echo ':: Installed:'
 dpkg -l | grep -i storcli
 

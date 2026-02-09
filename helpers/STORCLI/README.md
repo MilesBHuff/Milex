@@ -4,9 +4,9 @@ You may download the correct (and final) version of STORCLI3 [here](https://docs
 You may find the reference manual for STORCLI3 [here](https://docs.broadcom.com/doc/12352476).
 
 For the sake of clarity:
-* The following files were written from scratch by Miles Bradley Huff in 2025:
-    * `./storcli`
+* The following files were written from scratch by Miles Bradley Huff in 2025 and modified in 2026:
     * `./Ubuntu/install.sh`
 * The following files were written from scratch by Miles Bradley Huff in 2026:
     * `./storcliconf.ini`
     * `./README.md`
+    * `./storcli`
