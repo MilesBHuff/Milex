@@ -15,7 +15,7 @@ If you are not booting from the HBA, signed vs unsigned shouldn't matter.
 
 For the sake of clarity:
 * The following files were written from scratch by Miles Bradley Huff in 2025:
-    * `./flash_9300-8i.sh`
-    * `./flash_9305-16i.sh`
+    * `./9300-8i/flash.sh`
+    * `./9305-16i/flash.sh`
 * The following files were written from scratch by Miles Bradley Huff in 2026:
     * `./README.md`
