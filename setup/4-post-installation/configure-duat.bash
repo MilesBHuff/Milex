@@ -16,7 +16,7 @@ function helptext {
     echo 'If the VM ever goes down, you will have to be physically present to fix things; there is no simple+safe way to expose ssh to this host over WAN.'
     echo '(Note that this physical access requirement is no different than what would exist were we running OPNsense on bare metal.)'
     echo
-    echo 'Why bother? Well, Linux can do all of the following where FreeBSD either struggles or simply can’t: TPM, SecureBoot, ZFSBootManager, optimal hardware support, latest microcode, firmware updates.'
+    echo 'Why bother? Well, Linux can do all of the following where FreeBSD either struggles or simply can’t: TPM, SecureBoot, ZFSBootManager, optimal hardware support, latest microcode, firmware updates, RAID1 ESP.'
     echo 'Running OPNsense in a VM on a Linux host gives us the best of all worlds. Yes, it adds some complexity, but it removes other complexities and provides a level of security that just isn’t possible with a bare-metal BSD system.'
     echo
     echo 'A router is an absurdly high-value target for an evil-maid attack: it has the ability to see everything your network is doing, it can MITM literally everything, it can effortlessly exfiltrate anything it sees, and more.'
@@ -103,7 +103,7 @@ apt install -y intel-microcode firmware-intel-graphics firmware-realtek
 ##########################################################################################
 ## Set up auto-unlock via TPM — an edge router that requires manual intervention on every boot is not a good edge router.
 ## The main thing that needs to be done for this is a custom ZBM that contains the sealed key and instructions for how to unseal it. We don't actually have to go through the trouble of storing the sealed key in the initramfs because the system can auto-load the raw key from /etc/zfs/keys after ZBM unlocks it.
-## If the ESP flashdrive ever dies or gets corrupted, the recovery path is pretty simple: new flashdrive, vanilla ZBM, temp disable SB, manual unlock, regenerate custom ZBM, reboot, reenable SB.
+## If the ESP ever dies or gets corrupted, the recovery path is pretty simple: put vanilla ZBM on a flashdrive, temp disable SB, boot to flashdrive, manually unlock zpool, boot OS, regenerate custom ZBM, reboot, remove flashdrive, reenable SB.
 
 ## Make sure we actually have a TPM.
 if [[ ! -e /dev/tpmrm0 ]]; then
