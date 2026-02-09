@@ -107,18 +107,6 @@ apt full-upgrade -y
 apt install -y unattended-upgrades
 dpkg-reconfigure -plow unattended-upgrades
 
-##########################################################################################
-## FIRMWARE                                                                             ##
-##########################################################################################
-
-## Upgrade firmware
-echo ':: Upgrading firmware...'
-apt install -y fwupd
-set +e
-fwupdmgr refresh
-fwupdmgr get-updates && fwupdmgr update
-set -e
-
 ################################################################################
 ## INSTALL FUNDAMENTAL PACKAGES                                               ##
 ################################################################################
@@ -648,7 +636,7 @@ echo ':: Installing firmware, drivers, and tools...'
 ## General firmware
 apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 ## General firmware tools
-apt install -y iasl
+apt install -y fwupd iasl
 ## General hardware tools
 KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
 apt install -y linux-tools-common "linux-tools-$KVER" i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo nvme-cli
