@@ -45,6 +45,7 @@ else
     exit 2
 fi
 if [[
+    -z "$ENV_INSTALLER_ENVFILE" ||\
     -z "$ENV_NAME_ESP" ||\
     -z "$ENV_POOL_NAME_OS" ||\
     -z "$ENV_ZFS_ROOT"
