@@ -13,10 +13,12 @@ chown -Rv root:root "$MAIN_PATH"
 chmod -Rv 755       "$MAIN_PATH"
 
 SAS3FLASH_PATH="$MAIN_PATH/sas3flash"
+cp    'sas3flash'   "$SAS3FLASH_PATH"
 chown -Rv root:root "$SAS3FLASH_PATH"
 chmod -Rv 755       "$SAS3FLASH_PATH"
 
 SAS3IRCU_PATH="$MAIN_PATH/sas3ircu"
+cp    'sas3ircu'    "$SAS3IRCU_PATH"
 chown -Rv root:root "$SAS3IRCU_PATH"
 chmod -Rv 755       "$SAS3IRCU_PATH"
 
