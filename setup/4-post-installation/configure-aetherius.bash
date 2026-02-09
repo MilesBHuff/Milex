@@ -77,14 +77,14 @@ apt install -y -t "$DEBIAN_VERSION-backports" openrgb
 
 ## Install STORCLI 3.5 P34
 if [[ ! -d '/opt/MegaRAID/storcli' ]]; then
-    read -rp 'After you have downloaded and extracted STORCLI to the appropriate directory in this repo, press "Enter". ' FOO; unset FOO
+    read -rp 'After you have downloaded and extracted STORCLI to the appropriate directory in this repo, press "Enter". ' _; unset _
     cd "$ROOT_DIR/software/STORCLI/Ubuntu"
     ./install.sh
 fi
 
 ## Install SAS3FLASH (necessary for self-signing the UEFI ROM)
 if [[ ! -d '/opt/MegaRAID/installer' ]]; then
-    read -rp 'After you have downloaded and extracted SAS3FLASH and SAS3IRCU to the appropriate directory in this repo, press "Enter". ' FOO; unset FOO
+    read -rp 'After you have downloaded and extracted SAS3FLASH and SAS3IRCU to the appropriate directory in this repo, press "Enter". ' _; unset _
     cd "$ROOT_DIR/software/SAS3FLASH"
     ./install.sh
 fi
@@ -127,7 +127,7 @@ if [[ ! -f '/usr/local/sbin/ipmicfg' ]]; then
         if gpg --verify "$SIG" "$ARCHIVE"; then #FIXME: There is no way to know that the sig and the archive weren't *both* MITM'd.
             break
         else
-            read -rp 'Download failed; press "Enter" to try again. ' FOO && unset FOO
+            read -rp 'Download failed; press "Enter" to try again. ' _ && unset _
         fi
     done
     set -e

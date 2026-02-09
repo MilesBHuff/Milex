@@ -109,7 +109,7 @@ echo ':: Configuring virtualization and networking...'
 ## Wi-Fi is not passed-through; FreeBSD has poor support for it. Also, I simply don't intend for this box to ever handle Wi-Fi.
 ## That said, if I ever do decide to do Wi-Fi here, it would likely be via a second VM running OpenWRT — not via the OPNsense VM.
 ## Because only present-at-install-time Ethernet interfaces are passed-through, a USB interface can later be added as a way for the host to get a real management interface.
-read -rp 'Please ensure any Ethernet interfaces you want the host to own are not plugged-into the system. Press "Enter" to continue when ready. ' FOO; unset FOO
+read -rp 'Please ensure any Ethernet interfaces you want the host to own are not plugged-into the system. Press "Enter" to continue when ready. ' _; unset _
 
 ## Requisite kernel commandline flags
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE intel_iommu=on iommu=pt" ## PT is fine, since guest compromise makes the host useless anyway. The CPU is weak-enough that we need the extra performance.
@@ -239,7 +239,7 @@ virt-install \
     --cpu host-passthrough ## Needed to ensure features like AES-NI function optimally.
 echo 'It is now safe to connect any Ethernet interfaces you want the host to own.'
 echo 'In the OPNsense installer’s partitioner, please configure a GUID partition table, an EFI system partition, and a UFS root partition. (Do not use ZFS.)'
-read -rp 'Press "Enter" to install OPNsense inside the VM. To exit, shut the VM down. ' FOO; unset FOO
+read -rp 'Press "Enter" to install OPNsense inside the VM. To exit, shut the VM down. ' _; unset _
 virsh console anubis
 
 ## Start VM automatically
