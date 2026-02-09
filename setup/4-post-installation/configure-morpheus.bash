@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+################################################################################
+## META                                                                       ##
+################################################################################
+
 function helptext {
     echo "Usage: configure-morpheus.bash"
     echo
@@ -6,7 +12,10 @@ function helptext {
     echo 'Morpheus is an AI inference server running on a maxed-out Framework Desktop.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
-set -euo pipefail
+
+################################################################################
+## ENVIRONMENT                                                                ##
+################################################################################
 
 ## Get environment
 ENV_FILE='../../env.sh'
@@ -35,6 +44,10 @@ fi
 
 ## Variables
 KERNEL_COMMANDLINE="$(xargs < "$KERNEL_COMMANDLINE_DIR/commandline.txt")"
+
+##########################################################################################
+## INITIAL CONFIG                                                                       ##
+##########################################################################################
 
 echo ':: Installing DE...'
 apt install -y ubuntu-desktop-minimal
@@ -72,6 +85,10 @@ systemctl enable nut-client
 apt install -y amd64-microcode firmware-amd-graphics firmware-realtek
 ## Controllers
 apt install -y -t "$UBUNTU_VERSION-backports" openrgb
+
+##########################################################################################
+## CONFIGURE FOR AI                                                                     ##
+##########################################################################################
 
 ## Configure CPU features
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE amd_iommu=on iommu=pt"
@@ -120,6 +137,10 @@ AI_DIR=/srv/ai
 mkdir -p "$AI_DIR"
 chown "$USERNAME" "$AI_DIR"
 
+##########################################################################################
+## ADDITIONAL CONFIGURATION                                                             ##
+##########################################################################################
+
 ## Sysctl
 echo ':: Configuring sysctl...'
 ### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/61-io.conf
@@ -143,6 +164,10 @@ sysctl --system
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 "$KERNEL_COMMANDLINE_DIR/set-commandline" ## Sorts, deduplicates, and saves the new commandline.
 update-initramfs -u
+
+##########################################################################################
+## OUTRO                                                                                ##
+##########################################################################################
 
 ## Wrap up
 echo ':: Creating snapshot...'

@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+################################################################################
+## META                                                                       ##
+################################################################################
+
 function helptext {
     echo "Usage: configure-aetherius.bash"
     echo
@@ -6,7 +12,10 @@ function helptext {
     echo 'Aetherius is a NAS and home server running on a custom-built computer.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
-set -euo pipefail
+
+################################################################################
+## ENVIRONMENT                                                                ##
+################################################################################
 
 ## Get environment
 ENV_FILE='../../env.sh'
@@ -35,6 +44,10 @@ fi
 ## Variables
 KERNEL_COMMANDLINE="$(xargs < "$KERNEL_COMMANDLINE_DIR/commandline.txt")"
 
+##########################################################################################
+## INITIAL CONFIG                                                                       ##
+##########################################################################################
+
 ## Configure network
 echo ':: Configuring network...'
 ip addr show
@@ -58,6 +71,10 @@ apt install -y ipmitool mstflint openseachest
 ## Controllers
 apt install -y -t "$DEBIAN_VERSION-backports" openrgb
 
+##########################################################################################
+## SET UP TRNG                                                                          ##
+##########################################################################################
+
 ## Set up TRNG
 echo ':: Set up TRNG...'
 #NOTE: This installs Debian's official version in order to pull in dependencies, and then overrides it with a locally-compiled version. (The one shipped with Debian as of 2025-06-12 (0.3.3) is missing a critical patch that tells that CPU to reseed. Without this, the extra entropy is mostly wasted.)
@@ -80,6 +97,10 @@ ExecStart=/usr/local/sbin/infnoise --daemon --pidfile=/var/run/infnoise.pid --de
 EOF
 systemctl daemon-reload
 systemctl start infnoise
+
+##########################################################################################
+## ADDITIONAL CONFIGURATION                                                             ##
+##########################################################################################
 
 ## Configure CPU features
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE amd_iommu=on" ## Leaving `iommu=pt` off for security.
@@ -109,6 +130,10 @@ sysctl --system
 echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 "$KERNEL_COMMANDLINE_DIR/set-commandline" ## Sorts, deduplicates, and saves the new commandline.
 update-initramfs -u
+
+##########################################################################################
+## OUTRO                                                                                ##
+##########################################################################################
 
 ## Wrap up
 echo ':: Creating snapshot...'
