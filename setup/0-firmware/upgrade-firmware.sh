@@ -1,7 +1,6 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
+#!/bin/sh
 echo ':: Upgrading firmware...'
+set -e
 apt update
 apt install -y fwupd
 set +e
