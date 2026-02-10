@@ -195,10 +195,6 @@ EOF
 ## Sysctl
 echo ':: Configuring sysctl...'
 ### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/62-io-tweakable.conf
-idempotent_append 'vm.zone_reclaim_mode=0'              '/etc/sysctl.d/62-io-tweakable.conf'
-idempotent_append 'vm.swappiness=134'                   '/etc/sysctl.d/62-io-tweakable.conf'
-idempotent_append 'vm.vfs_cache_pressure=50'            '/etc/sysctl.d/62-io-tweakable.conf'
-idempotent_append 'vm.vfs_cache_pressure_denom=100'     '/etc/sysctl.d/62-io-tweakable.conf'
 idempotent_append 'kernel.mm.ksm.run=1'                 '/etc/sysctl.d/62-io-tweakable.conf'
 idempotent_append 'kernel.mm.ksm.pages_to_scan=100'     '/etc/sysctl.d/62-io-tweakable.conf'
 idempotent_append 'kernel.mm.ksm.sleep_millisecs=1000'  '/etc/sysctl.d/62-io-tweakable.conf'

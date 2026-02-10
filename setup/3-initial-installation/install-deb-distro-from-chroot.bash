@@ -855,6 +855,11 @@ idempotent_append 'vm.overcommit_ratio=80'           '/etc/sysctl.d/961-io-stati
 idempotent_append 'vm.memory_failure_recovery=1'     '/etc/sysctl.d/961-io-static.conf'
 idempotent_append 'vm.memory_failure_early_kill=1'   '/etc/sysctl.d/961-io-static.conf'
 idempotent_append 'vm.laptop_mode=0'                 '/etc/sysctl.d/961-io-static.conf'
+### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/62-io-tweakable.conf
+idempotent_append 'vm.zone_reclaim_mode=0'          '/etc/sysctl.d/62-io-tweakable.conf'
+idempotent_append 'vm.swappiness=134'               '/etc/sysctl.d/62-io-tweakable.conf'
+idempotent_append 'vm.vfs_cache_pressure=50'        '/etc/sysctl.d/62-io-tweakable.conf'
+idempotent_append 'vm.vfs_cache_pressure_denom=100' '/etc/sysctl.d/62-io-tweakable.conf'
 ### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/68-debug.conf
 idempotent_append 'net.ipv4.icmp_errors_use_inbound_ifaddr=1'    '/etc/sysctl.d/968-debug.conf'
 idempotent_append 'net.ipv4.icmp_ignore_bogus_error_responses=1' '/etc/sysctl.d/968-debug.conf'
