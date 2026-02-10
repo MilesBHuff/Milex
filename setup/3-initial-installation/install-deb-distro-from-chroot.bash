@@ -328,7 +328,23 @@ EOF
 echo 'Make sure to import your pools with `import -d /dev/disk/by-id`! Else, you will fail to import when `/dev/sdX` changes. '
 
 ## Configure ZFS
-# $ENV_ZFS_CONFIG_SCRIPT #TODO
+echo ':: Tuning ZFS...'
+cat > /etc/systemd/system/configure-zfs.service <<EOF
+[Unit]
+Description=Configure system-wide ZFS and block-device settings
+DefaultDependencies=no
+ConditionPathExists=$ENV_ZFS_CONFIG_SCRIPT
+After=systemd-udev-settle.service zfs-import.target zfs.target
+Requires=zfs.target
+[Service]
+Type=oneshot
+ExecStart=$ENV_ZFS_CONFIG_SCRIPT
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now configure-zfs.service
 
 ## Configure trim/discard
 echo ':: Scheduling trim...'
