@@ -133,7 +133,7 @@ apply_setting() {
         return 0
     else
         echo "'$KEYPATH' < '$VALUE'"
-        echo "$VALUE" > "$KEYPATH"
+        echo "$VALUE" > "$KEYPATH" 2>/dev/null
         EXIT_CODE=$?
         [ $EXIT_CODE -ne 0 ] && echo "$0: Failed to write \`$VALUE\` to '$KEYPATH'; value remains \`$ORIGINAL_VALUE\`." >&2
         return $EXIT_CODE
@@ -177,9 +177,16 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
     DEV_BASENAME="${DEV##*/}"
     DEV_NODE="/dev/$DEV_BASENAME"
 
+    ## Detect whether device is USB, and if so then what kind of USB
+    USB_MODE=-1
+    case "$(udevadm info --query=property --name="$DEV_NODE" | grep ^ID_USB_DRIVER=)" in
+        *=usb-storage) USB_MODE=0 ;;
+        *=uas)         USB_MODE=1 ;;
+    esac
+
     ## Attempt to mark flash drives are non-rotational, accepting that there will be false negatives.
     ROTATIONAL=$(cat "$DEV/queue/rotational" 2>/dev/null || echo 1)
-    if [ $ROTATIONAL -eq 1 ]; then
+    if [ "$USB_MODE" -gt -1 ] && [ $ROTATIONAL -eq 1 ]; then
         if udevadm info --query=property --name="$DEV_NODE" 2>/dev/null | grep -qi 'Flash'; then #TODO: Find a faster way to do this. #NOTE: This heuristic is imperfect, and depends upon the device not lying about being FLASH. To be fair, if rotational media advertises itself as "FLASH", it's not really our fault if we misidentify it here.
             SETTING_NEW=0
             SETTING_PATH="$DEV/queue/rotational"
@@ -188,24 +195,17 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
         fi
     fi
 
-    ## If device is USB, detect BOT vs UAS
-    IS_BOT=0
-    DRIVER_PATH="$(readlink -f "$DEV/device/driver" 2>/dev/null || true)"
-    case "$DRIVER_PATH" in */usb-storage) IS_BOT=1 ;; esac
-    unset DRIVER_PATH
-
     ## Queue depth
     SETTING_NEW=32
     [ "$ROTATIONAL" -eq 1 ] && SETTING_NEW=16 ## Cap HDD queue depths (prevents head-thrashing / improves latency without harming throughput) (16 is what Exoses are rated for.)
     case "$DEV_BASENAME" in nvme*) SETTING_NEW=$ENV_NVME_QUEUE_DEPTH ;; esac #TODO: Set this dynamically to the NVMe's actual max queue depth.
-    [ "$IS_BOT" -eq 1 ] && SETTING_NEW=1 ## BOT only supports 1.
+    [ "$USB_MODE" -eq 0 ] && SETTING_NEW=1 ## BOT only supports 1.
     SETTING_PATH="$DEV/device/queue_depth"
     apply_setting "$SETTING_NEW" "$SETTING_PATH"
 
     ## Scheduler
-    #NOTE: HDDs and BOT USBs need a scheduler since they will have queues below what ZFS can control, thanks to their above queue limits.
     SETTING_NEW="mq-deadline"
-    [ "$ROTATIONAL" -eq 0 ] && [ "$IS_BOT" -eq 0 ] && SETTING_NEW="none"
+    [ "$USB_MODE" -ne 0 ] && [ "$ROTATIONAL" -eq 0 ] && SETTING_NEW="none" ## HDDs and BOT USBs need a scheduler since they will have queues below what ZFS can control, thanks to their above queue limits.
     SETTING_PATH="$DEV/queue/scheduler"
     apply_setting "$SETTING_NEW" "$SETTING_PATH"
 
