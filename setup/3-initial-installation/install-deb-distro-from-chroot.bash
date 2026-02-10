@@ -363,7 +363,8 @@ After=systemd-udev-settle.service zfs-import.target zfs.target
 Before=multi-user.target
 ConditionPathExists=$ENV_TUNE_IO_SCRIPT
 [Service]
-ExecStart=$ENV_TUNE_IO_SCRIPT
+ExecStart=rm -f /run/tune-io.env && $ENV_TUNE_IO_SCRIPT
+ExecStopPost=/bin/rm -f /run/tune-io.env
 Type=oneshot
 TimeoutSec=10
 [Install]

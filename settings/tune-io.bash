@@ -12,33 +12,62 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-## Try to load environment variables from some possible locations.
-for ENV_FILE in \
-    '/etc/filesystem-env.sh' \
-    '../filesystem-env.sh'
-do
-    if [ -f "$ENV_FILE" ]; then
-        . "$ENV_FILE"
-        break
-    fi
-done
+## Make sure we have an envfile in `/run` with all the variables we need — this script can run a lot, and it would be ideal for it to not cause recurring disk I/O when it does so.
+ENV_CACHE='/run/tune-io.env'
+if [ ! -f "$ENV_CACHE" ]; then
 
-## Check to make sure that all required environment variables are defined.
-for KEY in \
-    ENV_NVME_QUEUE_DEPTH \
-    ENV_POOL_NAME_DAS \
-    ENV_POOL_NAME_NAS \
-    ENV_POOL_NAME_OS \
-    ENV_RECORDSIZE_HDD \
-    ENV_RECORDSIZE_SSD
-do
-    eval "VALUE=\${$KEY}"
-    if [ -z "$VALUE" ]; then
-        echo "ERROR: Missing environment variable: $KEY" >&2
+    ## Try to load environment variables from some possible locations.
+    SUCCESS=0
+    for ENV_FILE in \
+        '/etc/filesystem-env.sh' \
+        '../filesystem-env.sh'
+    do
+        if [ -f "$ENV_FILE" ]; then
+            . "$ENV_FILE"
+            SUCCESS=1
+            break
+        fi
+    done
+    if [ $SUCCESS -ne 1 ]; then
+        echo "$0: Unable to find envfiles." >&2
         exit 1
     fi
-done
+    unset SUCCESS
 
+    ## Create a randomly-named temporary file so that we don't conflict with concurrent runs of this script.
+    SCRATCH_ENV_FILE=$(mktemp --mode=0644)
+
+    ## Check to make sure that all required environment variables are defined; if they are, write them to the temporary envfile.
+    for KEY in \
+        ENV_NVME_QUEUE_DEPTH \
+        ENV_POOL_NAME_DAS \
+        ENV_POOL_NAME_NAS \
+        ENV_POOL_NAME_OS \
+        ENV_RECORDSIZE_HDD \
+        ENV_RECORDSIZE_SSD
+    do
+        eval "VALUE=\${$KEY}"
+        if [ -z "$VALUE" ]; then
+            echo "$0: Missing environment variable: '$KEY'." >&2
+            rm -f "$SCRATCH_ENV_FILE"
+            exit 2
+        else
+            echo "$KEY=$VALUE" >> "$SCRATCH_ENV_FILE"
+        fi
+    done
+
+    ## Deploy the completed cache.
+    mv -f "$SCRATCH_ENV_FILE" "$ENV_CACHE"
+fi
+
+## Read environment from cache.
+while IFS='=' read -r KEY VALUE; do
+    [ -n "$KEY" ] || continue
+    eval "$KEY=\$VALUE"
+    export "$KEY"
+done < "$ENV_CACHE"
+
+## This logs, performs, and handles attempts to change system settings.
 apply_setting() {
     VALUE=$1; unset 1
     KEYPATH=$2; unset 2
