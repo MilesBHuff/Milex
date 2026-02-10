@@ -16,70 +16,98 @@ fi
 ENV_CACHE='/run/tune-io.env'
 if [ ! -f "$ENV_CACHE" ]; then
 
-    ## Try to load environment variables from some possible locations.
-    SUCCESS=0
-    for ENV_FILE in \
-        '/etc/filesystem-env.sh' \
-        '../filesystem-env.sh'
-    do
-        if [ -f "$ENV_FILE" ]; then
-            . "$ENV_FILE"
-            SUCCESS=1
-            break
+    LOCKDIR='/run/tune-io.lock'
+    if ! mkdir "$LOCKDIR"; then
+        i=0
+        while [ ! -f "$ENV_CACHE" ] && [ $i -lt 50 ]; do
+            sleep 0.02
+            i=$((i+1))
+        done
+    else
+        trap 'rmdir "$LOCKDIR"' EXIT HUP INT TERM
+
+        ## Try to load environment variables from some possible locations.
+        SUCCESS=0
+        for ENV_FILE in \
+            '/etc/filesystem-env.sh' \
+            '../filesystem-env.sh'
+        do
+            if [ -f "$ENV_FILE" ]; then
+                . "$ENV_FILE"
+                SUCCESS=1
+                break
+            fi
+        done
+        if [ $SUCCESS -ne 1 ]; then
+            echo "$0: Unable to find envfiles." >&2
+            exit 1
         fi
-    done
-    if [ $SUCCESS -ne 1 ]; then
-        echo "$0: Unable to find envfiles." >&2
-        exit 1
+        unset SUCCESS
+
+        ## Create a randomly-named temporary file so that we don't conflict with concurrent runs of this script.
+        SCRATCH_ENV_FILE=$(mktemp --mode=0644)
+
+        ## Check to make sure that all required environment variables are defined; if they are, write them to the temporary envfile.
+        for KEY in \
+            ENV_NVME_QUEUE_DEPTH \
+            ENV_POOL_NAME_DAS \
+            ENV_POOL_NAME_NAS \
+            ENV_POOL_NAME_OS \
+            ENV_RECORDSIZE_HDD \
+            ENV_RECORDSIZE_SSD
+        do
+            eval "VALUE=\${$KEY}"
+            if [ -z "$VALUE" ]; then
+                echo "$0: Missing environment variable: '$KEY'." >&2
+                rm -f "$SCRATCH_ENV_FILE"
+                exit 2
+            else
+                echo "$KEY=$VALUE" >> "$SCRATCH_ENV_FILE"
+            fi
+        done
+
+        ## Deploy the completed cache.
+        mv -f "$SCRATCH_ENV_FILE" "$ENV_CACHE"
+
+        ## Clean up
+        rmdir "$LOCKDIR"
+        trap '' EXIT HUP INT TERM
     fi
-    unset SUCCESS
-
-    ## Create a randomly-named temporary file so that we don't conflict with concurrent runs of this script.
-    SCRATCH_ENV_FILE=$(mktemp --mode=0644)
-
-    ## Check to make sure that all required environment variables are defined; if they are, write them to the temporary envfile.
-    for KEY in \
-        ENV_NVME_QUEUE_DEPTH \
-        ENV_POOL_NAME_DAS \
-        ENV_POOL_NAME_NAS \
-        ENV_POOL_NAME_OS \
-        ENV_RECORDSIZE_HDD \
-        ENV_RECORDSIZE_SSD
-    do
-        eval "VALUE=\${$KEY}"
-        if [ -z "$VALUE" ]; then
-            echo "$0: Missing environment variable: '$KEY'." >&2
-            rm -f "$SCRATCH_ENV_FILE"
-            exit 2
-        else
-            echo "$KEY=$VALUE" >> "$SCRATCH_ENV_FILE"
-        fi
-    done
-
-    ## Deploy the completed cache.
-    mv -f "$SCRATCH_ENV_FILE" "$ENV_CACHE"
 fi
 
 ## Read environment from cache.
-while IFS='=' read -r KEY VALUE; do
-    [ -n "$KEY" ] || continue
-    eval "$KEY=\$VALUE"
-    export "$KEY"
+while read -r ASSIGNMENT; do
+    export "$ASSIGNMENT"
 done < "$ENV_CACHE"
 
 ## This logs, performs, and handles attempts to change system settings.
 apply_setting() {
     VALUE=$1; unset 1
     KEYPATH=$2; unset 2
-    [ -f "$KEYPATH" ] || return 1
-    echo "'$VALUE' > '$KEYPATH'"
-    echo "$VALUE" > "$KEYPATH"
-    EXIT_CODE=$?
-    if [ $EXIT_CODE -ne 0 ]; then
-        echo "$0: failed to write \`$VALUE\` to '$KEYPATH'; value remains \`$(cat "$KEYPATH" 2>/dev/null)\`." >&2
+    if [ ! -f "$KEYPATH" ]; then
+        echo "$0: Missing path: '$KEYPATH'." >&2
+        return 1
+    fi
+    ORIGINAL_VALUE="$(cat "$KEYPATH")"
+    if [ "$VALUE" = "$ORIGINAL_VALUE" ]; then
+        echo "'$KEYPATH' = '$VALUE'"
+        return 0
+    else
+        echo "'$KEYPATH' < '$VALUE'"
+        echo "$VALUE" > "$KEYPATH"
+        EXIT_CODE=$?
+        [ $EXIT_CODE -ne 0 ] && echo "$0: Failed to write \`$VALUE\` to '$KEYPATH'; value remains \`$ORIGINAL_VALUE\`." >&2
         return $EXIT_CODE
     fi
 }
+
+## These are loop-invariants that are checked with each loop; I am caching them here to avoid unnecessary repeat calls.
+DISKS=''
+for ZPOOL_DEVICE in $(zpool status -P 2>/dev/null | awk '$1 ~ /^\// {print $1}'); do #WARN: Does not support spaces in device paths, but this shouldn't ever be an issue.
+    DISK="$(readlink -f "$ZPOOL_DEVICE" 2>/dev/null)"
+    DISK=${DISK#/dev/}
+    DISKS="${DISKS:+$DISKS }$DISK"
+done
 
 #################
 ## DEVICE LOOP ##
@@ -88,16 +116,21 @@ apply_setting() {
 for DEV in /sys/block/sd* /sys/block/nvme*n*; do
     [ -e "$DEV" ] || continue
 
-    DEV_BASENAME="$(basename "$DEV")"
+    DEV_BASENAME="${DEV##*/}"
     DEV_NODE="/dev/$DEV_BASENAME"
 
     ## Attempt to mark flash drives are non-rotational, accepting that there will be false negatives.
-    if udevadm info --query=property --name="$DEV_NODE" 2>/dev/null | grep -q FLASH; then  #NOTE: This heuristic is imperfect, and depends upon the device not lying about being FLASH. To be fair, if rotational media advertises itself as "FLASH", it's not really our fault if we misidentify it here.
-        SETTING_NEW=0
-        SETTING_PATH="$DEV/queue/rotational"
-        apply_setting "$SETTING_NEW" "$SETTING_PATH"
-    fi
     ROTATIONAL=$(cat "$DEV/queue/rotational" 2>/dev/null || echo 1)
+    if [ $ROTATIONAL -eq 1 ]; then
+        case "$(udevadm info --query=property --name="$DEV_NODE" 2>/dev/null)" in #TODO: Find a faster way to do this.
+            *FLASH*) #NOTE: This heuristic is imperfect, and depends upon the device not lying about being FLASH. To be fair, if rotational media advertises itself as "FLASH", it's not really our fault if we misidentify it here.
+                SETTING_NEW=0
+                SETTING_PATH="$DEV/queue/rotational"
+                apply_setting "$SETTING_NEW" "$SETTING_PATH"
+                ROTATIONAL=$SETTING_NEW #NOTE: Not guaranteed to be true, but this is cheaper than doing a real check, and the rest of this script works better if it operates off the intended rotational status versus the actual.
+                ;;
+        esac
+    fi
 
     ## If device is USB, detect BOT vs UAS
     IS_BOT=0
@@ -131,39 +164,29 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
 
     ## Check whether device is part of a ZFS pool
     IS_PART_OF_POOL=0
-    for POOL_NAME in \
-        "$ENV_POOL_NAME_DAS" \
-        "$ENV_POOL_NAME_NAS" \
-        "$ENV_POOL_NAME_OS"
-    do
-        DEVICES=$(zpool status -P "$POOL_NAME" 2>/dev/null | awk '$1 ~ /^\// {print $1}')
-        for DEVICE in $DEVICES; do #WARN: Does not support spaces in device paths, but this shouldn't ever be an issue.
-            DISK=$(readlink -f "$DEVICE" 2>/dev/null | sed 's|^/dev/||')
-            if [ "/sys/block/$DISK" = "$DEV" ]; then
-                IS_PART_OF_POOL=1
-                break
-            fi
-        done
-        [ "$IS_PART_OF_POOL" -eq 1 ] && break
+    for DISK in $DISKS; do
+        if [ "/sys/block/$DISK" = "$DEV" ]; then
+            IS_PART_OF_POOL=1
+            break
+        fi
     done
     if [ "$IS_PART_OF_POOL" -eq 1 ]; then
 
         ## Match readahead size to the pool's recordsize
         #WARN: This code currently only works with recordsizes under 1M! (It expects "K".)
-        REGEX='s/K$//'
+        #WARN: This code currently does not get the pool's recordsize; it instead uses the environment variables that originally considered the pool's recordsize. #TODO: Use the real recordsize.
         if [ "$ROTATIONAL" -eq 0 ]; then
-            SETTING_NEW=$(echo "$ENV_RECORDSIZE_SSD" | sed "$REGEX")
+            SETTING_NEW="${ENV_RECORDSIZE_SSD%K}"
         else
-            SETTING_NEW=$(echo "$ENV_RECORDSIZE_HDD" | sed "$REGEX")
+            SETTING_NEW="${ENV_RECORDSIZE_HDD%K}"
         fi
-        unset REGEX
 
         SETTING_PATH="$DEV/queue/read_ahead_kb"
         apply_setting "$SETTING_NEW" "$SETTING_PATH"
 
         ## Match optimal I/O size to the pool's recordsize
         SETTING_PATH="$DEV/queue/optimal_io_size"
-        if [ $(cat "$SETTING_PATH" 2>/dev/null || echo '-1')  -eq 0 ]; then ## Only set if accessible and the value indicates it wasn't already set.
+        if IFS= read -r OIOS < "$SETTING_PATH" 2>/dev/null && [ "$OIOS" -eq 0 ]; then ## Only set if accessible and the value indicates it wasn't already set.
             SETTING_NEW=$((SETTING_NEW * 1024))
             apply_setting "$SETTING_NEW" "$SETTING_PATH"
         fi
