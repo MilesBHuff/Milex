@@ -70,6 +70,7 @@ if [ ! -f "$ENV_CACHE" ]; then
         }
 
         ## Check to make sure that all required environment variables are defined; if they are, write them to the temporary envfile.
+        EXPORTABLES=''
         for KEY in \
             ENV_NVME_QUEUE_DEPTH \
             ENV_POOL_NAME_DAS \
@@ -78,17 +79,22 @@ if [ ! -f "$ENV_CACHE" ]; then
             ENV_RECORDSIZE_HDD \
             ENV_RECORDSIZE_SSD
         do
-            eval "VALUE=\${$KEY}"
+            eval "VALUE=\"\${$KEY}\""
             if [ -z "$VALUE" ]; then
                 echo "$0: Missing environment variable: '$KEY'." >&2
                 rm -f "$SCRATCH_ENV_FILE"
                 exit 2
             else
-                echo "$KEY=$VALUE" >> "$SCRATCH_ENV_FILE"
+                SAFE_VALUE=$(echo "$VALUE" | sed "s/'/'\\\\''/g") #WARN: Doesn't support values with newlines, but that's fine; none of these should have one.
+                EXPORTABLES="${EXPORTABLES:+$EXPORTABLES }$KEY='$SAFE_VALUE'"
+                unset SAFE_VALUE
             fi
+            unset VALUE
         done
 
         ## Deploy the completed cache.
+        echo "$EXPORTABLES" > "$SCRATCH_ENV_FILE"
+        unset EXPORTABLES
         mv -f "$SCRATCH_ENV_FILE" "$ENV_CACHE"
         unset SCRATCH_ENV_FILE
 
@@ -98,14 +104,8 @@ if [ ! -f "$ENV_CACHE" ]; then
 fi
 
 ## Read environment from cache.
-. "$ENV_CACHE"
-KEYS=''
-while IFS='=' read -r KEY VALUE; do
-    # eval "$KEY=\$VALUE"
-    KEYS="${KEYS:+$KEYS }$KEY"
-done < "$ENV_CACHE"
-export ${KEYS?}
-unset KEYS ENV_CACHE
+export "$(cat "$ENV_CACHE")"
+unset ENV_CACHE
 
 ## Check interactivity
 INTERACTIVE=0
@@ -142,8 +142,7 @@ apply_setting() {
 
 ## These are loop-invariants that are checked with each loop; I am caching them here to avoid unnecessary repeat calls.
 #WARN: This code does not support spaces in device paths, but this shouldn't ever be an issue.
-DISKS=''
-if [ -f '/sys/module/zfs' ]; then
+if [ -d '/sys/module/zfs' ]; then
     while IFS='	' read -r _ VDEV _; do
         case "$VDEV" in
             /*)
@@ -154,12 +153,12 @@ if [ -f '/sys/module/zfs' ]; then
                 ## If partition, map to drive
                 PARENT="$(lsblk -no PKNAME "/dev/$DEV" 2>/dev/null || true)"
                 [ -n "$PARENT" ] && DEV="$PARENT"
+                unset PARENT
 
-                ## Append only if unique
-                case " $DISKS " in
-                    *" $DEV "*) ;;
-                    *) DISKS="${DISKS:+$DISKS }$DEV" ;;
-                esac
+                ## Mark it as part of a zpool
+                case "$DEV" in *[!A-Za-z0-9_]*|'') continue ;; esac
+                eval "${DEV}_IS_ZFS=1"
+                unset DEV
                 ;;
         esac
     done <<EOF
@@ -179,26 +178,34 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
 
     ## Detect whether device is USB, and if so then what kind of USB
     USB_MODE=-1
-    case "$(udevadm info --query=property --name="$DEV_NODE" | grep ^ID_USB_DRIVER=)" in
-        *=usb-storage) USB_MODE=0 ;;
-        *=uas)         USB_MODE=1 ;;
+    UDEVADM_QUERY=''
+    case "$DEV_BASENAME" in
+        sd*)
+            UDEVADM_QUERY="$(udevadm info --query=property --name="$DEV_NODE" 2>/dev/null)"
+            case "$UDEVADM_QUERY" in
+                *'ID_USB_DRIVER=usb-storage'*) USB_MODE=0 ;;
+                *'ID_USB_DRIVER=uas'*)         USB_MODE=1 ;;
+            esac
+            ;;
     esac
 
     ## Attempt to mark flash drives are non-rotational, accepting that there will be false negatives.
     ROTATIONAL=$(cat "$DEV/queue/rotational" 2>/dev/null || echo 1)
     if [ "$USB_MODE" -gt -1 ] && [ $ROTATIONAL -eq 1 ]; then
-        if udevadm info --query=property --name="$DEV_NODE" 2>/dev/null | grep -qi 'Flash'; then #TODO: Find a faster way to do this. #NOTE: This heuristic is imperfect, and depends upon the device not lying about being FLASH. To be fair, if rotational media advertises itself as "FLASH", it's not really our fault if we misidentify it here.
-            SETTING_NEW=0
-            SETTING_PATH="$DEV/queue/rotational"
-            apply_setting "$SETTING_NEW" "$SETTING_PATH"
-            ROTATIONAL=$SETTING_NEW #NOTE: Not guaranteed to be true, but this is cheaper than doing a real check, and the rest of this script actually works better if it operates off the intended rotational status versus the actual.
-        fi
+        case "$UDEVADM_QUERY" in
+            *[Ff][Ll][Aa][Ss][Hh]*) #NOTE: This heuristic is imperfect, and depends upon the device not lying about being FLASH. To be fair, if rotational media advertises itself as "FLASH", it's not really our fault if we misidentify it here.
+                SETTING_NEW=0
+                SETTING_PATH="$DEV/queue/rotational"
+                apply_setting "$SETTING_NEW" "$SETTING_PATH"
+                ROTATIONAL=$SETTING_NEW #NOTE: Not guaranteed to be true, but this is cheaper than doing a real check, and the rest of this script actually works better if it operates off the intended rotational status versus the actual.
+                ;;
+        esac
     fi
 
     ## Queue depth
     SETTING_NEW=32
     [ "$ROTATIONAL" -eq 1 ] && SETTING_NEW=16 ## Cap HDD queue depths (prevents head-thrashing / improves latency without harming throughput) (16 is what Exoses are rated for.)
-    case "$DEV_BASENAME" in nvme*) SETTING_NEW=$ENV_NVME_QUEUE_DEPTH ;; esac #TODO: Set this dynamically to the NVMe's actual max queue depth.
+    case "$DEV_BASENAME" in nvme*) SETTING_NEW=$ENV_NVME_QUEUE_DEPTH ;; esac #TODO: Set this dynamically to the NVMe's actual max queue depth. #TODO: Verify that NVMe devices even use the same `queue_depth` field as legacy devices.
     [ "$USB_MODE" -eq 0 ] && SETTING_NEW=1 ## BOT only supports 1.
     SETTING_PATH="$DEV/device/queue_depth"
     apply_setting "$SETTING_NEW" "$SETTING_PATH"
@@ -219,13 +226,9 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
     esac
 
     ## Check whether device is part of a ZFS pool
-    IS_PART_OF_POOL=0
-    for DISK in $DISKS; do
-        if [ "/sys/block/$DISK" = "$DEV" ]; then
-            IS_PART_OF_POOL=1
-            break
-        fi
-    done
+    set +u
+    eval "IS_PART_OF_POOL=\${${DEV_BASENAME}_IS_ZFS:-0}"
+    set -u
     if [ "$IS_PART_OF_POOL" -eq 1 ]; then
 
         ## Match readahead size to the pool's recordsize
