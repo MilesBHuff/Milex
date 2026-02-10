@@ -41,7 +41,7 @@ chmod 644 "$FILE"
 #################
 ## QUEUE DEPTH ##
 #################
-zfs_vdev_queue_depth_pct=100 ## Default is 1000 (basically no cap). We carefully tune our queue depths, so we can go with 100.
+echo "options zfs zfs_vdev_queue_depth_pct=100" >> "$FILE" ## Default is 1000 (basically no cap). We carefully tune our queue depths, so we can go with 100.
 case "$ENV_NVME_QUEUE_REGIME" in
     'SATA')
         ## The ZFS settings here affect all devices, including NVMes; but I'm using my NVMes for L2ARC, which ZFS heavily rate-limits for longevity, so it shouldn't matter that we're limiting them to a SATA queue depth.
