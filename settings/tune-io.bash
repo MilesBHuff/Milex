@@ -143,27 +143,29 @@ apply_setting() {
 ## These are loop-invariants that are checked with each loop; I am caching them here to avoid unnecessary repeat calls.
 #WARN: This code does not support spaces in device paths, but this shouldn't ever be an issue.
 DISKS=''
-while IFS='	' read -r _ VDEV _; do
-    case "$VDEV" in
-        /*)
-            ## Map to device
-            DEV="$(readlink -f "$VDEV" 2>/dev/null)" || continue
-            DEV="${DEV#/dev/}"
+if [ -f '/sys/module/zfs' ]; then
+    while IFS='	' read -r _ VDEV _; do
+        case "$VDEV" in
+            /*)
+                ## Map to device
+                DEV="$(readlink -f "$VDEV" 2>/dev/null)" || continue
+                DEV="${DEV#/dev/}"
 
-            ## If partition, map to drive
-            PARENT="$(lsblk -no PKNAME "/dev/$DEV" 2>/dev/null || true)"
-            [ -n "$PARENT" ] && DEV="$PARENT"
+                ## If partition, map to drive
+                PARENT="$(lsblk -no PKNAME "/dev/$DEV" 2>/dev/null || true)"
+                [ -n "$PARENT" ] && DEV="$PARENT"
 
-            ## Append only if unique
-            case " $DISKS " in
-                *" $DEV "*) ;;
-                *) DISKS="${DISKS:+$DISKS }$DEV" ;;
-            esac
-            ;;
-    esac
-done <<EOF
+                ## Append only if unique
+                case " $DISKS " in
+                    *" $DEV "*) ;;
+                    *) DISKS="${DISKS:+$DISKS }$DEV" ;;
+                esac
+                ;;
+        esac
+    done <<EOF
 $(zpool list -v -H -P 2>/dev/null)
 EOF
+fi
 
 #################
 ## DEVICE LOOP ##
