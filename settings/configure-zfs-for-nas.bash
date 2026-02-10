@@ -11,27 +11,42 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-## Get environment variables
-ENV_FILE='../filesystem-env.sh'; if [[ -f "$ENV_FILE" ]]; then source "$ENV_FILE"; else echo "ERROR: Missing '$ENV_FILE'."; exit 2; fi
-if [[ \
-    -z "$ENV_DEVICES_IN_L2ARC" ||\
-    -z "$ENV_ENDURANCE_L2ARC" ||\
-    -z "$ENV_MTBF_TARGET_L2ARC" ||\
-    -z "$ENV_NVME_QUEUE_DEPTH" ||\
-    -z "$ENV_NVME_QUEUE_REGIME" ||\
-    -z "$ENV_POOL_NAME_DAS" ||\
-    -z "$ENV_POOL_NAME_NAS" ||\
-    -z "$ENV_POOL_NAME_OS" ||\
-    -z "$ENV_RECORDSIZE_HDD" ||\
-    -z "$ENV_RECORDSIZE_SSD" ||\
-    -z "$ENV_SECONDS_DATA_LOSS_ACCEPTABLE" ||\
-    -z "$ENV_SPEED_L2ARC" ||\
-    -z "$ENV_SPEED_MBPS_MAX_SLOWEST_HDD" ||\
-    -z "$ENV_THRESHOLD_SMALL_FILE"
-]]; then
-    echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
-    exit 3
-fi
+## Try to load environment variables from some possible locations. Stop after the first match.
+declare -a ENV_FILES=(
+    '/etc/filesystem-env.sh'
+    '../filesystem-env.sh'
+)
+for ENV_FILE in "${ENV_FILES[@]}"; do
+    if [[ -f "$ENV_FILE" ]]; then
+        source "$ENV_FILE"
+        break
+    fi
+done
+unset ENV_FILES
+
+## Check to make sure that all the environment variables we need are defined.
+declare -a ENV_VARS=(
+    "$ENV_DEVICES_IN_L2ARC"
+    "$ENV_ENDURANCE_L2ARC"
+    "$ENV_MTBF_TARGET_L2ARC"
+    "$ENV_NVME_QUEUE_DEPTH"
+    "$ENV_NVME_QUEUE_REGIME"
+    "$ENV_POOL_NAME_DAS"
+    "$ENV_POOL_NAME_NAS"
+    "$ENV_POOL_NAME_OS"
+    "$ENV_RECORDSIZE_HDD"
+    "$ENV_RECORDSIZE_SSD"
+    "$ENV_SECONDS_DATA_LOSS_ACCEPTABLE"
+    "$ENV_SPEED_L2ARC"
+    "$ENV_SPEED_MBPS_MAX_SLOWEST_HDD"
+    "$ENV_THRESHOLD_SMALL_FILE"
+)
+for ENV_VAR in "${ENV_VARS[@]}"; do
+    if [[ -z "$ENV_VAR" ]]; then
+        echo "ERROR: Missing environment variable!" >&2
+        exit 1
+    fi
+done
 
 ## Recreate the config file that this script manages.
 FILE='/etc/modprobe.d/zfs-customized.conf'
