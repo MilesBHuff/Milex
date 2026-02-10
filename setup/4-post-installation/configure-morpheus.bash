@@ -109,13 +109,16 @@ echo ':: Setting up Python...'
 apt install -y python3-venv python3-pip
 
 echo ':: Setting up OCR...'
-apt install -y tesseract-ocr
+apt install -y tesseract-ocr #NOTE: This only does English; es posible que en el futuro necesitará otros.
 
 echo ':: Setting up Docker...'
 apt install -y docker.io
 systemctl enable docker
 systemctl start docker
-usermod -aG docker "$USERNAME"
+# usermod -aG docker "$USERNAME" ## Docker is rootish; might be better to require using `sudo` than to add users to the group.
+while ! systemctl is-active --quiet docker; do
+    sleep 1
+done
 
 echo ':: Setting up ROCm...'
 apt install -y wget gnupg2 ca-certificates
@@ -128,15 +131,15 @@ apt install -y rocm-core rocm-hip-runtime rocm-opencl-runtime rocminfo
 usermod -aG video,render "$USERNAME"
 
 echo ':: Testing ROCm...'
-rocminfo || echo "ROCm failed to initialize; check kernel/firmware compatibility." >&2
-su "$USERNAME" -c "docker run --rm -it \
---device=/dev/kfd \
---device=/dev/dri \
---group-add video \
---group-add render \
-rocm/rocm-terminal \
-rocminfo
-"
+sudo -u "$USERNAME" rocminfo || echo "ROCm failed to initialize; check kernel/firmware compatibility." >&2
+docker run --rm \
+    --device=/dev/kfd \
+    --device=/dev/dri \
+    --group-add video \
+    --group-add render \
+    rocm/rocm-terminal \
+    rocminfo ||\
+    echo "Docker ROCm failed to initialize; check kernel/firmware compatibility." >&2
 
 echo ':: Setting up directories...'
 AI_DIR=/srv/ai
@@ -149,7 +152,7 @@ chown -R "$USERNAME" "$AI_DIR"
 
 ## Sysctl
 echo ':: Configuring sysctl...'
-idempotent_append 'vm.max_map_count = 1048576'         '/etc/sysctl.d/99-ai.conf'
+idempotent_append 'vm.max_map_count=1048576'           '/etc/sysctl.d/99-ai.conf'
 ### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/62-io-tweakable.conf
 idempotent_append 'kernel.mm.ksm.run=0'                '/etc/sysctl.d/62-io-tweakable.conf'
 idempotent_append 'kernel.mm.ksm.pages_to_scan=100'    '/etc/sysctl.d/62-io-tweakable.conf'
