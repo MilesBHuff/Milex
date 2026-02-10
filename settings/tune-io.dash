@@ -22,7 +22,7 @@ if [ ! -f "$ENV_CACHE" ]; then
         ## Wait for the envfile cache to be generated.
         i=0
         while [ ! -f "$ENV_CACHE" ] && [ $i -lt 50 ]; do
-            sleep 0.02
+            sleep 0.04
             i=$((i+1))
         done
 
