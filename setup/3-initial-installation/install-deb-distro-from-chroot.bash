@@ -863,7 +863,7 @@ if [ $# -ne 2 ]; then
     exit 1
 fi
 VM="$1"; TTY="$2"
-unset 1 2
+shift 2
 clear
 while true; do
     PTS=$(virsh ttyconsole "$VM" 2>/dev/null || true)

@@ -8,7 +8,7 @@ set -u #NOTE: I don't think there's a need for `set -e` here.
 
 ## Make sure we're root
 if [ "$(id -u)" -ne 0 ]; then
-    echo "ERROR: This script must be run as root." >&2
+    echo "$0: This script must be run as root." >&2
     exit 1
 fi
 
@@ -18,11 +18,26 @@ if [ ! -f "$ENV_CACHE" ]; then
 
     LOCKDIR='/run/tune-io.lock'
     if ! mkdir "$LOCKDIR"; then
+
+        ## Wait for the envfile cache to be generated.
         i=0
         while [ ! -f "$ENV_CACHE" ] && [ $i -lt 50 ]; do
             sleep 0.02
             i=$((i+1))
         done
+
+        ## Clear out stale lockdirs.
+        if [ -d "$LOCKDIR" ]; then
+            NOW_EPOCH=$(date +%s)
+            LOCK_EPOCH=$(stat -c %Y "$LOCKDIR" 2>/dev/null || echo $((NOW_EPOCH + 10)))
+            [ $((NOW_EPOCH - LOCK_EPOCH)) -ge 10 ] && rmdir "$LOCKDIR" 2>/dev/null || true
+        fi
+
+        ## Exit if there's no envfile cache.
+        if [ ! -f "$ENV_CACHE" ]; then
+            echo "$0: Missing '$ENV_CACHE'." >&2
+            exit 3
+        fi
     else
         trap 'rmdir "$LOCKDIR"' EXIT HUP INT TERM
 
@@ -45,7 +60,14 @@ if [ ! -f "$ENV_CACHE" ]; then
         unset SUCCESS
 
         ## Create a randomly-named temporary file so that we don't conflict with concurrent runs of this script.
-        SCRATCH_ENV_FILE=$(mktemp --mode=0644)
+        SCRATCH_ENV_FILE=$(mktemp /run/tune-io.env.XXXXXX) || {
+            echo "$0: Unable to create tempfile." >&2
+            exit 4
+        }
+        chmod 0644 "$SCRATCH_ENV_FILE" || {
+            echo "$0: Unable to chmod tempfile: '$SCRATCH_ENV_FILE'." >&2
+            exit 5
+        }
 
         ## Check to make sure that all required environment variables are defined; if they are, write them to the temporary envfile.
         for KEY in \
@@ -68,29 +90,46 @@ if [ ! -f "$ENV_CACHE" ]; then
 
         ## Deploy the completed cache.
         mv -f "$SCRATCH_ENV_FILE" "$ENV_CACHE"
+        unset SCRATCH_ENV_FILE
 
         ## Clean up
-        rmdir "$LOCKDIR"
-        trap '' EXIT HUP INT TERM
+        rmdir "$LOCKDIR" && trap '' EXIT HUP INT TERM
     fi
 fi
 
 ## Read environment from cache.
-while read -r ASSIGNMENT; do
-    export "$ASSIGNMENT"
+. "$ENV_CACHE"
+KEYS=''
+while IFS='=' read -r KEY VALUE; do
+    # eval "$KEY=\$VALUE"
+    KEYS="${KEYS:+$KEYS }$KEY"
 done < "$ENV_CACHE"
+export ${KEYS?}
+unset KEYS ENV_CACHE
+
+## Check interactivity
+INTERACTIVE=0
+case "$-" in *i*) INTERACTIVE=1 ;; esac
 
 ## This logs, performs, and handles attempts to change system settings.
 apply_setting() {
-    VALUE=$1; unset 1
-    KEYPATH=$2; unset 2
+    VALUE=$1
+    KEYPATH=$2
+    shift 2
     if [ ! -f "$KEYPATH" ]; then
         echo "$0: Missing path: '$KEYPATH'." >&2
         return 1
     fi
     ORIGINAL_VALUE="$(cat "$KEYPATH")"
+    case "$ORIGINAL_VALUE" in
+        *'['*']'*)
+            PARSED_VALUE="$(echo "$ORIGINAL_VALUE" | sed -n 's/.*\[\([^]]*\)\].*/\1/p')" #AI regex ## This works around values that print out a selection, like the I/O scheduler does.
+            [ -n "$PARSED_VALUE" ] && ORIGINAL_VALUE="$PARSED_VALUE"
+            unset PARSED_VALUE
+            ;;
+    esac
     if [ "$VALUE" = "$ORIGINAL_VALUE" ]; then
-        echo "'$KEYPATH' = '$VALUE'"
+        [ $INTERACTIVE -eq 1 ] && echo "'$KEYPATH' = '$VALUE'"
         return 0
     else
         echo "'$KEYPATH' < '$VALUE'"
@@ -102,11 +141,20 @@ apply_setting() {
 }
 
 ## These are loop-invariants that are checked with each loop; I am caching them here to avoid unnecessary repeat calls.
+#WARN: This code does not support spaces in device paths, but this shouldn't ever be an issue.
 DISKS=''
-for ZPOOL_DEVICE in $(zpool status -P 2>/dev/null | awk '$1 ~ /^\// {print $1}'); do #WARN: Does not support spaces in device paths, but this shouldn't ever be an issue.
-    DISK="$(readlink -f "$ZPOOL_DEVICE" 2>/dev/null)"
-    DISK=${DISK#/dev/}
-    DISKS="${DISKS:+$DISKS }$DISK"
+for ZPOOL_DEVICE in $(zpool status -P 2>/dev/null | awk '$1 ~ /^\// {print $1}'); do
+    ## Get the device
+    DEV="$(readlink -f "$ZPOOL_DEVICE" 2>/dev/null)" || continue
+    DEV="${DEV#/dev/}"
+    ## If $DEV is a partition, map to parent disk
+    PARENT="$(lsblk -no PKNAME "/dev/$DEV" 2>/dev/null || true)"
+    [ -n "$PARENT" ] && DEV="$PARENT"
+    ## Append only if not already present
+    case " $DISKS " in
+        *" $DEV "*) ;;
+        *) DISKS="${DISKS:+$DISKS }$DEV" ;;
+    esac
 done
 
 #################
@@ -127,7 +175,7 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
                 SETTING_NEW=0
                 SETTING_PATH="$DEV/queue/rotational"
                 apply_setting "$SETTING_NEW" "$SETTING_PATH"
-                ROTATIONAL=$SETTING_NEW #NOTE: Not guaranteed to be true, but this is cheaper than doing a real check, and the rest of this script works better if it operates off the intended rotational status versus the actual.
+                ROTATIONAL=$SETTING_NEW #NOTE: Not guaranteed to be true, but this is cheaper than doing a real check, and the rest of this script actually works better if it operates off the intended rotational status versus the actual.
                 ;;
         esac
     fi
