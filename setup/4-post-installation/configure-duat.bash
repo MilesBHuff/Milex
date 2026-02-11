@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
-#TODO: Make it possible to specify what parts of the scipt to run.
-
-################################################################################
-## META                                                                       ##
-################################################################################
-
+set -euo pipefail; shopt -s nullglob
 function helptext {
     echo "Usage: configure-duat.bash"
     echo
@@ -25,12 +19,18 @@ function helptext {
     echo 'So I must insist that what is insane is not that I’ve gone through the effort of writing this script; it’s that others view this level of security — the bare minimum needed to prevent trivial evil-maid attacks — as unreasonable.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
+#TODO: Make it possible to specify what parts of the scipt to run.
 
-################################################################################
-## FUNCTIONS                                                                  ##
-################################################################################
-echo ':: Declaring functions...'
+###############################
+##   B O I L E R P L A T E   ##
+###############################
+echo ':: Initializing...'
 
+## Base paths
+CWD=$(pwd)
+ROOT_DIR="$CWD/../.."
+
+## Import functions
 declare -a HELPERS=('../helpers/load_envfile.bash' '../helpers/idempotent_append.bash')
 for HELPER in "${HELPERS[@]}"; do
     if [[ -x "$HELPER" ]]; then
@@ -41,31 +41,28 @@ for HELPER in "${HELPERS[@]}"; do
     fi
 done
 
-################################################################################
-## ENVIRONMENT                                                                ##
-################################################################################
+###########################
+##   V A R I A B L E S   ##
+###########################
+
 echo ':: Getting environment...'
-
-## Base paths
-CWD=$(pwd)
-ROOT_DIR="$CWD/../.."
-
 ## Load and validate environment variables
 load_envfile "$ROOT_DIR/setup-env.sh" \
-    "$ENV_FILESYSTEM_ENVFILE" \
-    "$ENV_SETUP_ENVFILE"
+    ENV_FILESYSTEM_ENVFILE \
+    ENV_SETUP_ENVFILE
 load_envfile "$ENV_FILESYSTEM_ENVFILE" \
-    "$ENV_POOL_NAME_OS"
+    ENV_POOL_NAME_OS
 load_envfile "$ENV_SETUP_ENVFILE" \
-    "$UBUNTU_VERSION" \
-    "$ENV_KERNEL_COMMANDLINE_DIR"
+    UBUNTU_VERSION \
+    ENV_KERNEL_COMMANDLINE_DIR
 
+echo ':: Declaring variables...'
 ## Misc local variables
 KERNEL_COMMANDLINE="$(xargs < "$ENV_KERNEL_COMMANDLINE_DIR/commandline.txt")"
 
-##########################################################################################
-## INITIAL CONFIG                                                                       ##
-##########################################################################################
+#####################################
+##   I N I T I A L   C O N F I G   ##
+#####################################
 
 echo ':: Switching to NetworkManager from networkd...'
 apt install -y networkmanager ## Just to be safe; should have already installed with the above.
@@ -94,9 +91,9 @@ systemctl enable nut-client
 ## Drivers
 apt install -y intel-microcode firmware-intel-graphics firmware-realtek
 
-##########################################################################################
-## TPM                                                                                  ##
-##########################################################################################
+###############
+##   T P M   ##
+###############
 ## Set up auto-unlock via TPM — an edge router that requires manual intervention on every boot is not a good edge router.
 ## The main thing that needs to be done for this is a custom ZBM that contains the sealed key and instructions for how to unseal it. We don't actually have to go through the trouble of storing the sealed key in the initramfs because the system can auto-load the raw key from /etc/zfs/keys after ZBM unlocks it.
 ## If the ESP ever dies or gets corrupted, the recovery path is pretty simple: put vanilla ZBM on a flashdrive, temp disable SB, boot to flashdrive, manually unlock zpool, boot OS, regenerate custom ZBM, reboot, remove flashdrive, reenable SB.
@@ -155,9 +152,9 @@ EOF
 ## Update ZBM
 generate-zbm
 
-##########################################################################################
-## CONFIGURE VM + NETWORKING                                                            ##
-##########################################################################################
+#######################################
+##   V M   &   N E T W O R K I N G   ##
+#######################################
 echo ':: Configuring virtualization and networking...'
 ## The networking goal is to passthrough to the guest all physical Ethernet interfaces that are present during this installer.
 ## Wi-Fi is not passed-through; FreeBSD has poor support for it. Also, I simply don't intend for this box to ever handle Wi-Fi.
@@ -310,9 +307,9 @@ After=libvirtd.service libvirt-guests.service
 Wants=libvirtd.service
 EOF
 
-##########################################################################################
-## POWER ON/OFF                                                                         ##
-##########################################################################################
+#################################
+##   P O W E R   O N / O F F   ##
+#################################
 
 #TODO: VM could be suspended before hibernation, to reduce RAM requirements; then automatically resumed after restore.
 
@@ -320,9 +317,9 @@ EOF
 
 #TODO: Restart daily because this box does not have ECC.
 
-##########################################################################################
-## ADDITIONAL CONFIGURATION                                                             ##
-##########################################################################################
+#########################################################
+##   A D D I T I O N A L   C O N F I G U R A T I O N   ##
+#########################################################
 
 ## Anubis's serial console gets TTY11.
 sudo systemctl enable --now vm-to-tty@anubis:11.service
@@ -342,9 +339,9 @@ echo "$KERNEL_COMMANDLINE" > "$ENV_KERNEL_COMMANDLINE_DIR/commandline.txt"
 "$ENV_KERNEL_COMMANDLINE_DIR/set-commandline" ## Sorts, deduplicates, and saves the new commandline.
 update-initramfs -u
 
-##########################################################################################
-## OUTRO                                                                                ##
-##########################################################################################
+###################
+##   O U T R O   ##
+###################
 
 ## Wrap up
 echo ':: Creating snapshot...'

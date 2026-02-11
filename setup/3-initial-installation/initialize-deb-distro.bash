@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-################################################################################
-## META                                                                       ##
-################################################################################
-
+set -euo pipefail; shopt -s nullglob
 function helptext {
     echo "Usage: install-deb-distro.bash"
     echo
@@ -15,12 +10,17 @@ function helptext {
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
 ## Special thanks to ChatGPT for helping with my endless questions.
 
-################################################################################
-## FUNCTIONS                                                                  ##
-################################################################################
-echo ':: Declaring functions...'
+###############################
+##   B O I L E R P L A T E   ##
+###############################
+echo ':: Initializing...'
 
-declare -a HELPERS=('../helpers/load_envfile.bash')
+## Base paths
+CWD=$(pwd)
+ROOT_DIR="$CWD/../.."
+
+## Import functions
+declare -a HELPERS=('../helpers/load_envfile.bash' '../helpers/idempotent_append.bash')
 for HELPER in "${HELPERS[@]}"; do
     if [[ -x "$HELPER" ]]; then
         source "$HELPER"
@@ -30,34 +30,23 @@ for HELPER in "${HELPERS[@]}"; do
     fi
 done
 
-function cleanup {
-    set +e
-    umount -R dev proc run sys tmp media/scripts 2>/dev/null || true
-}; trap cleanup EXIT
+###########################
+##   V A R I A B L E S   ##
+###########################
 
-################################################################################
-## ENVIRONMENT                                                                ##
-################################################################################
-echo ':: Getting environment...'
-
-## Base paths
-CWD=$(pwd)
-ROOT_DIR="$CWD/../.."
-
+echo ':: Getting the environment...'
 ## Load and validate environment variables
 load_envfile "$ROOT_DIR/filesystem-env.sh" \
-    "$ENV_NAME_ESP" \
-    "$ENV_POOL_NAME_OS" \
-    "$ENV_ZFS_ROOT"
+    ENV_NAME_ESP \
+    ENV_POOL_NAME_OS \
+    ENV_ZFS_ROOT
 load_envfile "$ROOT_DIR/setup-env.sh" \
-    "$ENV_SETUP_ENVFILE" \
-    "$DEBIAN_VERSION" \
-    "$UBUNTU_VERSION"
+    ENV_SETUP_ENVFILE \
+    DEBIAN_VERSION \
+    UBUNTU_VERSION
 
-################################################################################
-## MOUNTS                                                                     ##
-################################################################################
-
+echo ':: Setting the target...'
+## Validate and set our sights on the directory which will contain the new operating system
 export TARGET="$ENV_ZFS_ROOT/$ENV_POOL_NAME_OS"
 if ! mountpoint -q "$TARGET"; then
     echo "ERROR: Target '$TARGET' not mounted!" >&2
@@ -65,8 +54,62 @@ if ! mountpoint -q "$TARGET"; then
 fi
 cd "$TARGET"
 
+echo ':: Determining distro...'
+## Get current distro
+declare -i DISTRO=0
+while [[ "$DISTRO" -ne 1 && "$DISTRO" -ne 2 ]]; do
+    set +e
+    read -rp "Which distro are we setting up? (Type '1' for 'Debian' or '2' for 'Ubuntu') " DISTRO
+    set -e
+done
+export DISTRO
+
+##########################
+##   B O O T S T R A P  ##
+##########################
+
+## Install base system
+echo ':: Installing base system...'
+apt update
+apt install -y debootstrap
+if [[ $DISTRO -eq 1 ]]
+    then debootstrap "$DEBIAN_VERSION" "$TARGET"
+    else debootstrap "$UBUNTU_VERSION" "$TARGET" 'https://archive.ubuntu.com/ubuntu'
+fi
+
+## Clone files whose paths are the same in both the host and the chroot
+echo ':: Cloning files from the host system...'
+declare -a FILES=(
+    'etc/zfs/zpool.cache'
+    "etc/zfs/keys/$ENV_POOL_NAME_OS.key"
+    'etc/hostid' ## ZFS keeps track of the host that imported it in its cachefile, so we need to keep the same hostid as the LiveCD.
+)
+for FILE in "${FILES[@]}"; do
+    mkdir -p "$(dirname -- "$FILE")"
+    [[ -e "/$FILE" ]] && install "/$FILE" "$FILE" || echo "WARN: '/$FILE' does not exist!" >&2
+done
+unset FILES
+## Clone files whose paths differ between host and chroot
+install -m 755 "$ROOT_DIR/filesystem-env.sh"      "$TARGET$ENV_FILESYSTEM_ENVFILE"; export ENV_FILESYSTEM_ENVFILE
+install -m 755 "$ROOT_DIR/setup-env.sh"           "$TARGET$ENV_SETUP_ENVFILE";      export ENV_SETUP_ENVFILE
+install -m 755 "$ROOT_DIR/settings/tune-io.dash"  "$TARGET$ENV_TUNE_IO_SCRIPT";     export ENV_TUNE_IO_SCRIPT
+install -m 755 "$ROOT_DIR/settings/tune-zfs.bash" "$TARGET$ENV_TUNE_ZFS_SCRIPT";    export ENV_TUNE_ZFS_SCRIPT
+
+#####################
+##   C H R O O T   ##
+#####################
+
+## Ensure that we umount on exit.
+echo ':: Preparing for mounts...'
+function cleanup {
+    set -e
+    cd "$TARGET"
+    set +e
+    umount -R dev proc run sys tmp media/scripts 2>/dev/null || true
+}; trap cleanup EXIT
+
 ## Mount tmpfs dirs
-echo ':: Mounting tmpfs dirs...'
+echo ':: Mounting guest directories...'
 declare -a TMPS=(tmp)
 for TMP in "${TMPS[@]}"; do
     if mountpoint -q "$TMP"; then
@@ -77,47 +120,8 @@ for TMP in "${TMPS[@]}"; do
     fi
 done
 
-################################################################################
-## BOOTSTRAP                                                                  ##
-################################################################################
-
-echo ':: Debootstrapping...'
-declare -i DISTRO=0
-while [[ "$DISTRO" -ne 1 && "$DISTRO" -ne 2 ]]; do
-    set +e
-    read -rp "Which distro are we setting up? (Type '1' for 'Debian' or '2' for 'Ubuntu') " DISTRO
-    set -e
-done
-export DISTRO
-apt update
-apt install -y debootstrap
-if [[ $DISTRO -eq 1 ]]
-    then debootstrap "$DEBIAN_VERSION" "$TARGET"
-    else debootstrap "$UBUNTU_VERSION" "$TARGET" 'https://archive.ubuntu.com/ubuntu'
-fi
-
-## Bring over things from /etc
-echo ':: Bringing over configs...'
-declare -a FILES=('etc/zfs/zpool.cache' "etc/zfs/keys/$ENV_POOL_NAME_OS.key")
-for FILE in "${FILES[@]}"; do
-    mkdir -p "$(dirname -- "$FILE")"
-    [[ -e "/$FILE" ]] && cp -a "/$FILE" "$FILE" || echo "WARN: '/$FILE' does not exist!" >&2
-done
-unset FILES
-cp -a /etc/hostid etc/hostid ## ZFS keeps track of the host that imported it in its cachefile, so we need to keep the same hostid as the LiveCD.
-
-## Bring over config files
-install -m 755 "$ROOT_DIR/filesystem-env.sh"      "$TARGET$ENV_FILESYSTEM_ENVFILE"; export ENV_FILESYSTEM_ENVFILE
-install -m 755 "$ROOT_DIR/setup-env.sh"           "$TARGET$ENV_SETUP_ENVFILE";      export ENV_SETUP_ENVFILE
-install -m 755 "$ROOT_DIR/settings/tune-io.dash"  "$TARGET$ENV_TUNE_IO_SCRIPT";     export ENV_TUNE_IO_SCRIPT
-install -m 755 "$ROOT_DIR/settings/tune-zfs.bash" "$TARGET$ENV_TUNE_ZFS_SCRIPT";    export ENV_TUNE_ZFS_SCRIPT
-
-################################################################################
-## CHROOT                                                                     ##
-################################################################################
-
 ## Bind-mount system directories for chroot
-echo ':: Bindmounting directories for chroot...'
+echo ':: Bind-mounting host directories...'
 declare -a BIND_DIRS=(dev proc run sys)
 for BIND_DIR in "${BIND_DIRS[@]}"; do
     if mountpoint -q "$BIND_DIR"; then
@@ -136,6 +140,7 @@ else
 fi
 
 ## Run chroot-based scripts
-echo ':: Run the following script in chroot:'
-echo ":: /$SCRIPTS_DIR/helpers/install-deb-distro-from-chroot.bash"
+echo ':: Done.'
+echo 'You will now be dropped into a chroot of your new system.'
+echo "Please run the following script: /$SCRIPTS_DIR/helpers/install-deb-distro-from-chroot.bash"
 exec chroot "$TARGET" env bash --login

@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
-#TODO: Make it possible to specify what parts of the scipt to run.
-
-################################################################################
-## META                                                                       ##
-################################################################################
-
+set -euo pipefail; shopt -s nullglob
 function helptext {
     echo "Usage: install-deb-distro-from-chroot.bash"
     echo
@@ -16,12 +10,18 @@ function helptext {
 }
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
 ## Special thanks to ChatGPT for helping with my endless questions.
+#TODO: Make it possible to specify what parts of the scipt to run.
 
-################################################################################
-## FUNCTIONS                                                                  ##
-################################################################################
-echo ':: Declaring functions...'
+###############################
+##   B O I L E R P L A T E   ##
+###############################
+echo ':: Initializing...'
 
+## Base paths
+CWD=$(pwd)
+ROOT_DIR="$CWD/../.."
+
+## Import functions
 declare -a HELPERS=('../helpers/load_envfile.bash' '../helpers/idempotent_append.bash')
 for HELPER in "${HELPERS[@]}"; do
     if [[ -x "$HELPER" ]]; then
@@ -32,45 +32,44 @@ for HELPER in "${HELPERS[@]}"; do
     fi
 done
 
-################################################################################
-## ENVIRONMENT                                                                ##
-################################################################################
-echo ':: Getting environment...'
+###########################
+##   V A R I A B L E S   ##
+###########################
 
-## Base paths
-CWD=$(pwd)
-
+echo ':: Getting the environment...'
 ## Load and validate environment variables
+load_envfile "$ENV_FILESYSTEM_ENVFILE" \
+    ENV_NAME_ESP \
+    ENV_POOL_NAME_OS \
+    ENV_ZFS_ROOT
+load_envfile "$ENV_SETUP_ENVFILE" \
+    DEBIAN_VERSION \
+    UBUNTU_VERSION \
+    ENV_KERNEL_COMMANDLINE_DIR
+## Load and validate variables passed-into the chroot
 declare -a ENV_VARS=(
-    "$DISTRO"
-    "$ENV_FILESYSTEM_ENVFILE"
-    "$ENV_SETUP_ENVFILE"
-    "$ENV_TUNE_IO_SCRIPT"
-    "$ENV_TUNE_ZFS_SCRIPT"
-    "$TARGET"
+    DISTRO
+    ENV_FILESYSTEM_ENVFILE
+    ENV_SETUP_ENVFILE
+    ENV_TUNE_IO_SCRIPT
+    ENV_TUNE_ZFS_SCRIPT
+    TARGET
 )
 for ENV_VAR in "${ENV_VARS[@]}"; do
-    if [[ -z "$ENV_VAR" ]]; then
+    if [[ -z "$(eval "\$$ENV_VAR")" ]]; then
     echo "ERROR: This script is designed to be run from a \`chroot\` spawned by \`install-deb-distro.bash\`." >&2
     exit 4
     fi
 done
 unset ENV_VARS
-load_envfile "$ENV_FILESYSTEM_ENVFILE" \
-    "$ENV_NAME_ESP" \
-    "$ENV_POOL_NAME_OS" \
-    "$ENV_ZFS_ROOT"
-load_envfile "$ENV_SETUP_ENVFILE" \
-    "$DEBIAN_VERSION" \
-    "$UBUNTU_VERSION" \
-    "$ENV_KERNEL_COMMANDLINE_DIR"
 
+echo ':: Declaring variables...'
 ## Misc local variables
 KERNEL_COMMANDLINE=''
 
-################################################################################
-## CONFIGURE APT                                                              ##
-################################################################################
+###################################
+##   C O N F I G U R E   A P T   ##
+###################################
 
 ## Configure apt
 echo ':: Configuring apt...'
@@ -114,9 +113,9 @@ echo ':: Automating upgrades...'
 apt install -y unattended-upgrades
 dpkg-reconfigure -plow unattended-upgrades
 
-##########################################################################################
-## BASE SYSTEM                                                                          ##
-##########################################################################################
+#################################################################
+##   I N S T A L L   F U N D A M E N T A L   P A C K A G E S   ##
+#################################################################
 
 echo ':: Installing base system...'
 case "$HOSTNAME" in
@@ -124,10 +123,6 @@ case "$HOSTNAME" in
     'morpheus'|'duat') apt install -y ubuntu-server ;;
     *) echo "WARN: Unsupported hostname: '$HOSTNAME'" ;;
 esac
-
-################################################################################
-## INSTALL FUNDAMENTAL PACKAGES                                               ##
-################################################################################
 
 ## Install build tools
 echo ':: Installing build tools...'
@@ -159,9 +154,9 @@ echo ':: Enabling Mandatory Access Control...'
 apt install -y apparmor apparmor-utils apparmor-notify apparmor-profiles apparmor-profiles-extra
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE apparmor=1 security=apparmor"
 
-################################################################################
-## INTERACTIVE SYSTEM CONFIGURATION                                           ##
-################################################################################
+#########################################################################
+##   I N T E R A C T I V E   S Y S T E M   C O N F I G U R A T I O N   ##
+#########################################################################
 
 ## Configure hostname
 echo ':: Configuring hostname...'
@@ -182,9 +177,9 @@ dpkg-reconfigure console-setup
 dpkg-reconfigure keyboard-configuration
 dpkg-reconfigure tzdata
 
-################################################################################
-## USERS                                                                      ##
-################################################################################
+###################
+##   U S E R S   ##
+###################
 
 ## Set up /etc/skel
 echo ':: Creating user configs...'
@@ -203,9 +198,9 @@ read -rp "Please enter a username for your personal user: " USERNAME
 id "$USERNAME" >/dev/null 2>&1 || adduser "$USERNAME"
 export USERNAME
 
-################################################################################
-## MEMORY MOUNTS                                                              ##
-################################################################################
+###################################
+##   M E M O R Y   M O U N T S   ##
+###################################
 
 ## Configure swap
 echo ':: Configuring swap...'
@@ -275,14 +270,9 @@ After=tmp.mount
 EOF
 systemctl daemon-reload
 
-## Hibernation
-# echo ':: Configuring hibernation...'
-#TODO: Enable hibernation, provide a pre-hibernation hook that creates a swap zvol equal to the amount of system RAM, provide a post-hibernation-restore hook that deletes that zvol.
-#TODO: Configure NUT to trigger hibernation when the UPS is low on battery.
-
-################################################################################
-## ZFS                                                                        ##
-################################################################################
+###############
+##   Z F S   ##
+###############
 
 ## Install and configure ZFS
 echo ':: Installing ZFS...'
@@ -402,9 +392,9 @@ WantedBy=timers.target
 EOF
 systemctl enable zfstrim.timer
 
-################################################################################
-## MOUNT OPTIONS                                                              ##
-################################################################################
+###################################
+##   M O U N T   O P T I O N S   ##
+###################################
 
 ## Enforce mount options
 echo ':: Changing default mount options...'
@@ -482,9 +472,9 @@ EOF
 
 unset BASENAME SCRIPT SERVICE
 
-################################################################################
-## ESP                                                                        ##
-################################################################################
+###############
+##   E S P   ##
+###############
 
 ## Initialize ESP
 echo ':: Initializing ESP...'
@@ -670,9 +660,9 @@ sbverify --list /boot/esp/EFI/BOOT/BOOTX64.EFI
 
 #TODO: Make ZBM host a dropbear ssh service, to enable manual remote unlocks. Ideally, this only starts when unlocking fails.
 
-##########################################################################################
-## PACKAGES                                                                             ##
-##########################################################################################
+#########################
+##   P A C K A G E S   ##
+#########################
 
 ## Install daemons
 echo ':: Installing daemons...'
@@ -711,15 +701,15 @@ apt install -y cups rsync
 ## Niche applications
 # apt install -y # sanoid
 
-##########################################################################################
-## TIME                                                                                 ##
-##########################################################################################
+#################
+##   T I M E   ##
+#################
 
 #TODO: Configure Chrony
 
-##########################################################################################
-## HIBERNATION                                                                          ##
-##########################################################################################
+###############################
+##   H I B E R N A T I O N   ##
+###############################
 
 #TODO: Enable hibernation
 ##
@@ -734,9 +724,9 @@ apt install -y cups rsync
 
 #TODO: Enable automatic hibernation when NUT detects that the UPS is low on battery.
 
-##########################################################################################
-## NETWORKING                                                                           ##
-##########################################################################################
+#############################
+##   N E T W O R K I N G   ##
+#############################
 
 echo ':: Configuring networking...'
 
@@ -773,9 +763,9 @@ SUBSYSTEM=="rfkill", ATTR{type}=="wlan", ACTION=="add|change", RUN+="/usr/sbin/r
 EOF
 fi; unset DO_IT
 
-##########################################################################################
-## THEMING                                                                              ##
-##########################################################################################
+#######################
+##   T H E M I N G   ##
+#######################
 
 # ## Better bitmap font
 # #FIXME: It doesn't handle box-drawing characters, and it could be made to handle Powerline characters.
@@ -799,9 +789,9 @@ fi; unset DO_IT
 # cd "$CWD"
 # unset FILE
 
-##########################################################################################
-## RECONFIGURE FSH                                                                      ##
-##########################################################################################
+#######################################
+##   R E C O N F I G U R E   F S H   ##
+#######################################
 echo ':: Modifying filesystem hierarchy...'
 
 ## `/var/www` needs to be moved to `/srv` so that it is treated the same as other web services.
@@ -845,9 +835,9 @@ if [[ -d "$VARKEEP_DIR" ]]; then
 fi
 unset VARKEEP_DIR
 
-##########################################################################################
-## SIZES                                                                                ##
-##########################################################################################
+###################
+##   S I Z E S   ##
+###################
 
 ## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
 echo ':: Tweaking various compression settings...'
@@ -872,9 +862,9 @@ SystemMaxUse=256M
 RuntimeMaxUse=128M
 EOF
 
-##########################################################################################
-## TTY ASSIGNMENTS                                                                      ##
-##########################################################################################
+#######################################
+##   T T Y   A S S I G N M E N T S   ##
+#######################################
 echo ':: Assigning TTYs...'
 
 ## Put the host console at 10.
@@ -920,9 +910,9 @@ sudo systemctl daemon-reload
 
 ## The idea is that VMs' serial consoles can own all TTYs higher than 10.
 
-##########################################################################################
-## ADDITIONAL CONFIGURATION                                                             ##
-##########################################################################################
+#########################################################
+##   A D D I T I O N A L   C O N F I G U R A T I O N   ##
+#########################################################
 
 ## Sysctl
 echo ':: Configuring sysctl...'
@@ -980,9 +970,9 @@ export ENV_KERNEL_COMMANDLINE_DIR
 "$ENV_KERNEL_COMMANDLINE_DIR/set-commandline"
 update-initramfs -u
 
-##########################################################################################
-## OUTRO                                                                                ##
-##########################################################################################
+###################
+##   O U T R O   ##
+###################
 
 ## Wrap up
 echo ':: Creating snapshot...'

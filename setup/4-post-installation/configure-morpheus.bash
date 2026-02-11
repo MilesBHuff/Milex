@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
-#TODO: Make it possible to specify what parts of the scipt to run.
-
-################################################################################
-## META                                                                       ##
-################################################################################
-
+set -euo pipefail; shopt -s nullglob
 function helptext {
     echo "Usage: configure-morpheus.bash"
     echo
@@ -13,12 +7,18 @@ function helptext {
     echo 'Morpheus is an AI inference server running on a maxed-out Framework Desktop.'
 }
 ## Special thanks to ChatGPT for helping with my endless questions.
+#TODO: Make it possible to specify what parts of the scipt to run.
 
-################################################################################
-## FUNCTIONS                                                                  ##
-################################################################################
-echo ':: Declaring functions...'
+###############################
+##   B O I L E R P L A T E   ##
+###############################
+echo ':: Initializing...'
 
+## Base paths
+CWD=$(pwd)
+ROOT_DIR="$CWD/../.."
+
+## Import functions
 declare -a HELPERS=('../helpers/load_envfile.bash' '../helpers/idempotent_append.bash')
 for HELPER in "${HELPERS[@]}"; do
     if [[ -x "$HELPER" ]]; then
@@ -29,32 +29,29 @@ for HELPER in "${HELPERS[@]}"; do
     fi
 done
 
-################################################################################
-## ENVIRONMENT                                                                ##
-################################################################################
+###########################
+##   V A R I A B L E S   ##
+###########################
+
 echo ':: Getting environment...'
-
-## Base paths
-CWD=$(pwd)
-ROOT_DIR="$CWD/../.."
-
 ## Load and validate environment variables
 load_envfile "$ROOT_DIR/setup-env.sh" \
-    "$ENV_FILESYSTEM_ENVFILE" \
-    "$ENV_SETUP_ENVFILE"
+    ENV_FILESYSTEM_ENVFILE \
+    ENV_SETUP_ENVFILE
 load_envfile "$ENV_FILESYSTEM_ENVFILE" \
-    "$ENV_POOL_NAME_OS"
+    ENV_POOL_NAME_OS
 load_envfile "$ENV_SETUP_ENVFILE" \
-    "$UBUNTU_VERSION" \
-    "$USERNAME" \
-    "$ENV_KERNEL_COMMANDLINE_DIR"
+    UBUNTU_VERSION \
+    USERNAME \
+    ENV_KERNEL_COMMANDLINE_DIR
 
+echo ':: Declaring variables...'
 ## Misc local variables
 KERNEL_COMMANDLINE="$(xargs < "$ENV_KERNEL_COMMANDLINE_DIR/commandline.txt")"
 
-##########################################################################################
-## INITIAL CONFIG                                                                       ##
-##########################################################################################
+#####################################
+##   I N I T I A L   C O N F I G   ##
+#####################################
 
 echo ':: Installing DE...'
 apt install -y ubuntu-desktop-minimal
@@ -93,9 +90,9 @@ apt install -y amd64-microcode firmware-amd-graphics firmware-realtek
 ## Controllers
 apt install -y -t "$UBUNTU_VERSION-backports" openrgb
 
-##########################################################################################
-## CONFIGURE FOR AI                                                                     ##
-##########################################################################################
+#########################################
+##   C O N F I G U R E   F O R   A I   ##
+#########################################
 
 ## Configure CPU features
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE amd_iommu=on iommu=pt"
@@ -147,15 +144,15 @@ AI_DIR=/srv/ai
 mkdir -p "$AI_DIR"
 chown -R "$USERNAME" "$AI_DIR"
 
-##########################################################################################
-## AUTOMATIC RESTARTS                                                                   ##
-##########################################################################################
+#############################################
+##   A U T O M A T I C   R E S T A R T S   ##
+#############################################
 
 #TODO: Restart daily because this box does not have ECC.
 
-##########################################################################################
-## ADDITIONAL CONFIGURATION                                                             ##
-##########################################################################################
+#########################################################
+##   A D D I T I O N A L   C O N F I G U R A T I O N   ##
+#########################################################
 
 ## Sysctl
 echo ':: Configuring sysctl...'
@@ -173,9 +170,9 @@ echo "$KERNEL_COMMANDLINE" > "$ENV_KERNEL_COMMANDLINE_DIR/commandline.txt"
 "$ENV_KERNEL_COMMANDLINE_DIR/set-commandline" ## Sorts, deduplicates, and saves the new commandline.
 update-initramfs -u
 
-##########################################################################################
-## OUTRO                                                                                ##
-##########################################################################################
+###################
+##   O U T R O   ##
+###################
 
 ## Wrap up
 echo ':: Creating snapshot...'
