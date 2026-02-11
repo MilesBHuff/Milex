@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+#TODO: Make it possible to specify what parts of the scipt to run.
 
 ################################################################################
 ## META                                                                       ##
