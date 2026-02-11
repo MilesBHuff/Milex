@@ -311,11 +311,13 @@ Wants=libvirtd.service
 EOF
 
 ##########################################################################################
-## AUTOMATIC RESTARTS                                                                   ##
+## POWER ON/OFF                                                                         ##
 ##########################################################################################
 
+#TODO: VM could be suspended before hibernation, to reduce RAM requirements; then automatically resumed after restore.
+
 #TODO: VM must be suspended or shut-down before any restart or power-off.
-#TODO: VM should ideally be suspended before hibernation, to reduce RAM requirements; and then automatically resumed after restore.
+
 #TODO: Restart daily because this box does not have ECC.
 
 ##########################################################################################

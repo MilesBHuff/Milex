@@ -230,7 +230,7 @@ cat > /etc/systemd/zram-generator.conf <<'EOF'
 zram-size = ram / 3
 #TODO: Tune compression level.
 compression-algorithm = zstd(level=2)
-## Priority should be maxed, else slower devices would be preferred.
+## Priority should be maxed, to help avoid slower devices becoming preferred.
 swap-priority = 32767
 
 ## /tmp
@@ -719,20 +719,18 @@ apt install -y cups rsync
 ## HIBERNATION                                                                          ##
 ##########################################################################################
 
-#TODO
+#TODO: Enable hibernation
 ##
-## enable hibernation
-## but before hibernation happens, we create a new sparse zvol with compression enabled
-## we put a sparse swap partition on that zvol equal to total consumed RAM
-## we set its priority to the absolute max
-## then we hibernate
+## Right before hibernation happens, we create a new sparse zvol with compression enabled. It always has the same name/path.
+## We then format it as a sparse swap partition equal to total RAM. It always has the same UUID.
+## We set its priority to the absolute minimum (-1) so that no live data is ever sent there.
+## Then we hibernate to it.
 ##
-## initramfs needs then to unhibernate from this zvol
-## then delete the zvol
-##
-## at the end of normal boots, we should look for and delete the zvol, just in case something goes wrong and the hibernation fails mid-way through
-##
-## NUT needs to be configured to trigger hibernation when UPS battery is low.
+## initramfs needs to be told to unhibernate from this zvol swap. This must happen immediately after it unlocks the pool(s).
+## After the system is fully restored, we delete the zvol.
+## We also delete the zvol on normal boots (and log a warning), just in case anything ever goes wrong and a dead zvol swap is ever somehow left behind.
+
+#TODO: Enable automatic hibernation when NUT detects that the UPS is low on battery.
 
 ##########################################################################################
 ## NETWORKING                                                                           ##
