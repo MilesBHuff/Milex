@@ -361,7 +361,7 @@ TimeoutSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable "$TUNE_IO_SERVICE"  #NOTE: Not starting now, since we're in a chroot.
+systemctl enable "$TUNE_IO_SERVICE" #NOTE: Not starting now, since we're in a chroot.
 cat > /etc/udev/rules.d/90-tune-io.rules <<EOF
 ACTION=="add|change", SUBSYSTEM=="block", DEVTYPE=="disk", ENV{DEVNAME}!="", RUN+="/bin/systemctl start --no-block $TUNE_IO_SERVICE"
 EOF
@@ -472,9 +472,9 @@ EOF
 
 unset BASENAME SCRIPT SERVICE
 
-###############
-##   E S P   ##
-###############
+#################################################
+##   E F I   S Y S T E M   P A R T I T I O N   ##
+#################################################
 
 ## Initialize ESP
 echo ':: Initializing ESP...'
@@ -565,6 +565,10 @@ zfs set keylocation=file://"$KEYFILE" "$ENV_POOL_NAME_OS"
 echo 'UMASK=0077' > /etc/initramfs-tools/conf.d/umask.conf
 echo "FILES=\"$KEYDIR/*\"" > /etc/initramfs-tools/conf.d/99-zfs-keys.conf
 unset KEYDIR KEYFILE
+
+#############################
+##   S E C U R E B O O T   ##
+#############################
 
 ## Set up SecureBoot
 SBDIR='/etc/secureboot'
