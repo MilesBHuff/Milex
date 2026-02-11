@@ -269,6 +269,8 @@ cat > /etc/systemd/system/console-setup.service.d/override.conf <<'EOF' #BUG: Re
 After=tmp.mount
 EOF
 systemctl daemon-reload
+## Because swap is now in memory, the kernel's usual assumption that swap is slow has been made false. We need to let the kernel know.
+idempotent_append 'vm.swappiness=134' '/etc/sysctl.d/62-io-tweakable.conf' ## This value is a preference ratio of 2:1::cache:anon, which is the inverse of the default 1:2::cache:anon ratio.
 
 ###############
 ##   Z F S   ##
@@ -932,7 +934,7 @@ idempotent_append 'vm.memory_failure_early_kill=1'   '/etc/sysctl.d/961-io-stati
 idempotent_append 'vm.laptop_mode=0'                 '/etc/sysctl.d/961-io-static.conf'
 ### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/62-io-tweakable.conf
 idempotent_append 'vm.zone_reclaim_mode=0'          '/etc/sysctl.d/62-io-tweakable.conf'
-idempotent_append 'vm.swappiness=134'               '/etc/sysctl.d/62-io-tweakable.conf'
+#NOTE: `vm.swappiness` was set in the "S W A P" section of this file.
 idempotent_append 'vm.vfs_cache_pressure=50'        '/etc/sysctl.d/62-io-tweakable.conf'
 idempotent_append 'vm.vfs_cache_pressure_denom=100' '/etc/sysctl.d/62-io-tweakable.conf'
 ### See the following for explanations: https://github.com/MilesBHuff/Dotfiles/blob/master/Linux/etc/sysctl.d/68-debug.conf
