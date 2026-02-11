@@ -107,6 +107,9 @@ esac
 echo ':: Upgrading packages...'
 apt update
 apt full-upgrade -y
+
+## Enable automatic upgrades
+echo ':: Automating upgrades...'
 apt install -y unattended-upgrades
 dpkg-reconfigure -plow unattended-upgrades
 
