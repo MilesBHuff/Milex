@@ -24,7 +24,7 @@ Scripts that generate either of the following:
 
 #### initial installation
 
-Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu. These are *far* from being my favorite distros, but their and their derivatives' official support for ZFS makes them the single greatest choices for serious infrastructure in 2026 apart from NixOS.
+Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu. (These are *far* from being my favorite distros, but their and their derivatives' official support for ZFS makes them the single greatest choices for serious infrastructure in 2026 apart from NixOS.) **(Particularly stand-out features are emboldened.)**
 
 * `initialize-deb-distro`: Lays the groundwork for and initializes a `chroot` to the target system.
 * `install-deb-distro-from-chroot`: Executes a series of "modules" to set up a `.deb`-based distro from `chroot`.
@@ -39,10 +39,10 @@ Scripts that install an operating system to a ZFS root. These scripts are capabl
         * `fsh`: Modifies the system's filesystem hierarchy to maximize the utility of ZFS's snapshots.
         * `mem-fs`: Sets up various memory-based filesystems, like `/tmp` and swap. Configures zswap as a lightly-compressed hot cache and zram swap as a moderately-compressed cold cache.
     * `boot`: Configure the boot chain.
-        * `esp-with-zbm.bash`: Sets up an ESP containing a custom ZFSBootMenu image that unlocks a Linux system whose entire root (including `/boot`) is on encrypted ZFS.
-        * `secureboot-with-zbm.bash`: Sets up SecureBoot using ONLY self-signed keys. It includes hooks to auto-sign ZFSBootMenu and kernel modules.
-        * `tpm-autounlock-with-zbm.bash`: [optional] Sets up TPM auto-unlocking for ZFSBootMenu+SecureBoot.
-        * `hibernation`: Allows hibernation by way of temporary swap zvol.
+        * **`esp-with-zbm.bash`: Sets up an ESP containing a custom ZFSBootMenu image that unlocks a Linux system whose entire root (including `/boot`) is on encrypted ZFS.**
+        * **`secureboot-with-zbm.bash`: Sets up SecureBoot using ONLY self-signed keys. It includes hooks to auto-sign ZFSBootMenu and kernel modules.**
+        * **`tpm-autounlock-with-zbm.bash`: [optional] Sets up TPM auto-unlocking for ZFSBootMenu+SecureBoot.**
+        * **`hibernation`: Allows hibernation by way of temporary swap zvol.**
     * `apps`: Add and configure various applications.
         * `packages`: Install all sorts of things that the system will need.
         * `time`: Configure the system's time daemon.
