@@ -86,6 +86,7 @@ Scripts that tailor an initial install to a specific machine and use-case. At pr
     * Tweaks some settings.
 * `configure-morpheus`: For my AI inference box.
     * Installs various necessary applications.
+    * Switches to NetworkManager.
     * [WIP] installs various things necessary for running inference (including ROCm).
     * [WIP] Configures auto-hibernation on low-battery UPS.
     * [WIP] Configures auto-restarts (because no ECC).
