@@ -21,9 +21,10 @@ Scripts that configure firmware. There are presently two:
 * `upgrade-firmware`: This uses `fwupd` to upgrade system firmware.
 
 #### partition + format
-Scripts that generate either of the following:
-* a ZFS pool containing an HDD mirror for bulk data and mirrors of SSD partitions for SLOG and for SVDEV (metadata / small files).
-* a ZFS pool containing a mirror of SSD partitions for an operating system, and an mdadm RAID1 of SSD partitions which contains an ESP.
+Scripts that produce one of the following:
+* `os-pool`: a ZFS pool containing a mirror of SSD partitions for an operating system, and an mdadm RAID1 of SSD partitions which contains an ESP.
+* `nas-pool`: a ZFS pool containing an HDD mirror for bulk data and mirrors of SSD partitions for SLOG and for SVDEV (metadata / small files).
+* `das-pool`: a ZFS pool containing one or more HDDs, intended to be used as a backup of `nas-pool`.
 
 #### initial installation
 Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu.† **(Particularly stand-out features are emboldened.)**
