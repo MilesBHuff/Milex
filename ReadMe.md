@@ -7,14 +7,18 @@ This repo contains scripts, configurations, etc that pertain to my homelab.
 ### settings
 
 Scripts that apply settings.
+* `tune-io`: This script can be run manually or via udev rule. It helps ensure that various settings, mainly queue depth, is set optimally per the characteristics of each disk, and in consideration of the ZFS configuration.
+* `tune-zfs`: This script is run manually, and generates a `/etc/modprobe.d/zfs-customized.conf` file with settings optimized for the system's ZFS setup.
 
 ### setup
 
-Scripts that set up a computer.
+Scripts that set up a computer. They diverge so much from base Debian/Ubuntu/Proxmox that they might as well constitute a "Milex" spin of `.deb` distros.
 
 #### firmware
 
-Scripts that configure firmware. There are presently two: one that formats NVMe drives to be 4Kn, and one that upgrades the current system's firmwares.
+Scripts that configure firmware. There are presently two:
+* `low-level-format`: This formats NVMe drives to be 4Kn. (It's not the 2000s anymore; virtually everything supports 4Kn now. I want to be rid of the 512e specter.)
+* `upgrade-firmware`: This uses `fwupd` to upgrade system firmware.
 
 #### partition + format
 
@@ -24,7 +28,7 @@ Scripts that generate either of the following:
 
 #### initial installation
 
-Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu. (These are *far* from being my favorite distros, but their and their derivatives' official support for ZFS makes them the single greatest choices for serious infrastructure in 2026 apart from NixOS.) **(Particularly stand-out features are emboldened.)**
+Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu.† **(Particularly stand-out features are emboldened.)**
 
 * `initialize-deb-distro`: Lays the groundwork for and initializes a `chroot` to the target system.
 * `install-deb-distro-from-chroot`: Executes a series of "modules" to set up a `.deb`-based distro from `chroot`.
@@ -38,7 +42,7 @@ Scripts that install an operating system to a ZFS root. These scripts are capabl
         * `mount-options`: Make `lazytime` and `noatime` act as *de facto* defaults across the system.
         * `fsh`: Modifies the system's filesystem hierarchy to maximize the utility of ZFS's snapshots.
         * `mem-fs`: Sets up various memory-based filesystems, like `/tmp` and swap. Configures zswap as a lightly-compressed hot cache and zram swap as a moderately-compressed cold cache.
-    * `boot`: Configure the boot chain.
+    * `boot`: Configure the boot chain. The end-result is strongly resistant to Evil-Maid attacks, and the overall architecture is much-more-elegant than anything shipping today (early 2026).
         * **`esp-with-zbm.bash`: Sets up an ESP containing a custom ZFSBootMenu image that unlocks a Linux system whose entire root (including `/boot`) is on encrypted ZFS.**
         * **`secureboot-with-zbm.bash`: Sets up SecureBoot using ONLY self-signed keys. It includes hooks to auto-sign ZFSBootMenu and kernel modules.**
         * **`tpm-autounlock-with-zbm.bash`: [optional] Sets up TPM auto-unlocking for ZFSBootMenu+SecureBoot.**
@@ -52,6 +56,8 @@ Scripts that install an operating system to a ZFS root. These scripts are capabl
         * `sizes`: Disables compression across the operating system to let ZFS compression take over. Also limits the sizes of logs.
         * `sysctl`: Various sysctl tweaks. Improves security, reduces logspam, and improves I/O performance.
         * `commandline`: Configures the kernel commandline, taking care to organize and deduplicate the arguments provided by the other modules.
+
+*† (Debian and Ubuntu are *far* from being my favorite distros, but their and their derivatives' official support for ZFS makes them the single greatest choices for serious infrastructure in 2026, apart from perhaps NixOS.)*
 
 #### post-installation + conversion
 
@@ -70,10 +76,15 @@ Scripts that install packages which are not shipped via PPA. Currently, these in
 ### sourceables
 
 Scripts that can be sourced at the commandline.
+* `auto-hardlink`: This is a one-shot deduplication script wrapping `rdfind`. It recursively compares all the files in a directory, and after making super-duper-extra-sure that it's found a duplicate, it converts one of the two copies into a hardlink.
+* `rclonoid`: Uses `rclone` to reliably and quickly send data from one location to another while maintaining literally all properties. Primarily used as a way to transfer data from old drives onto the NAS.
+* `rsyncoid`: Uses `rsync` to do what `rclonoid` does, but slower and less-elegantly.
 
 ### tasks
 
-Scripts that are meant to be run from a server.
+Scripts meant to standardize and simplify specific recurrent actions.
+* `rclonoid-from-das-to-nas`: This is a way to resilver from backup, after recreating the NAS's zpool from scratch. Used a couple times while optimizing pool and dataset properties.
+* `replicate-zfs`: Uses `zfs send | recv` to send data between two zpools that share history. You can select between a few different options for how to do this. The script is still somewhat experimental.
 
 ### tests
 
