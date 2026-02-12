@@ -50,6 +50,7 @@ Scripts that install an operating system to a ZFS root. These scripts are capabl
         * `tty`: Configures tty10 to display the system console, and adds an easy way to display VM consoles on tty11+.
         * `integrity`: [WIP] Configures some automatic integrity checks.
     * `config`: Various supplementary configurations.
+        * `email`: [WIP] Configures sending email notifications.
         * `sizes`: Disables compression across the operating system to let ZFS compression take over. Also limits the sizes of logs.
         * `sysctl`: Various sysctl tweaks. Improves security, reduces logspam, and improves I/O performance.
         * `commandline`: Configures the kernel commandline, taking care to organize and deduplicate the arguments provided by the other modules.
