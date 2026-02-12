@@ -8,7 +8,7 @@ Why go to such lengths? Well, a number of core reasons:
 
 ## Dependencies
 * Zebiantu is designed to utilize either Debian 13 "Trixie" or Ubuntu 24.04 "Noble Numbat" as its base.
-* Zebiantu is built around ZFS 2.3. It will be reworked to support ZFS 2.4 once all existing WIPs have been addressed.
+* Zebiantu is built around ZFS 2.3.
 
 ## Directories
 
@@ -119,6 +119,12 @@ Scripts meant to standardize and simplify specific recurrent actions.
 
 ### tests
 Scripts that test some functionality. At present, the only test is one of ZFS compression speeds and ratios.
+
+## Upcoming features
+These will be implemented once Zebiantu is feature-complete.
+* ZFS 2.4 support
+    * `nas-pool` partitioned svdev + SLOG mirror is simplified to a single whole-disk svdev mirror, using the new ZIL-on-svdev feature.
+    * Automatic defragmentation: a daemon that periodically checks file fragmentation for files physically located on an HDD, and runs `zfs rewrite` on anything found to have significant fragmentation.
 
 ## License
 Copyright © 2025–2026 Miles Bradley Huff. Licensed publicly per the terms of the GNU General Public License (v3.0 or later).
