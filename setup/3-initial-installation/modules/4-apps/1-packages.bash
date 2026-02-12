@@ -16,12 +16,16 @@ systemctl enable rasdaemon
 systemctl mask systemd-coredump.socket systemd-coredump@.service
 
 ## Install firmware
-echo ':: Installing firmware, drivers, and tools...'
+echo ':: Installing firmware, drivers, and related tools...'
 ## General firmware
 apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 ## General firmware tools
 apt install -y fwupd iasl
-## General tools
+unset KVER
+sensors-detect --auto
+
+## General utilities
+echo ':: Installing utilities...'
 KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
 apt install -y \
     linux-tools-common \
@@ -53,8 +57,6 @@ apt install -y \
     sysstat \
     tpm2-tools \
     usbutils
-unset KVER
-sensors-detect --auto
 
 ## Install applications
 echo ':: Installing applications...'
