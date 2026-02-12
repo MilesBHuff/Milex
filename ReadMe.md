@@ -24,7 +24,7 @@ Scripts that generate either of the following:
 
 #### initial installation
 
-Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu, and use ZFSBootMenu to permit booting directly to a fully-encrypted ZFS root, without exposing `/boot`. The scripts also set up SecureBoot with custom keys, thereby giving all systems fairly robust protection against Evil Maid attacks.
+Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu, and use ZFSBootMenu to permit booting directly to a fully-encrypted ZFS root, without exposing `/boot`. The scripts also set up SecureBoot with custom keys, thereby giving all systems fairly robust protection against Evil Maid attacks. And there is an option to enable TPM auto-unlocking (which I use on the edge router).
 
 Debian and Ubuntu are *far* from being my favorite distros, but their and their derivatives' official support for ZFS makes them the single greatest choices for serious infrastructure in 2026 apart from NixOS.
 
