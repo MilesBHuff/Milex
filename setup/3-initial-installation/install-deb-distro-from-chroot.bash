@@ -80,8 +80,9 @@ fi
 
 ## `/var/www` needs to be moved to `/srv` so that it is treated the same as other web services.
 if [[ ! -L '/var/www' ]]; then
-    [[ ! -d '/var/www' ]] && mkdir /var/www
-    mv -f   '/var/www' '/srv/www' #FIXME: Will fail if `/srv/www` already exists; we need logic that merges the two directories.
+    [[ ! -d '/var/www' ]] && mkdir '/var/www'
+    [[ ! -d '/srv/www' ]] && mkdir '/srv/www'
+    rsync -a --remove-source-files '/var/www/' '/srv/www/'
     ln -sTv '/srv/www' '/var/www'
 fi
 
