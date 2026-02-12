@@ -23,7 +23,32 @@ apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 apt install -y fwupd iasl
 ## General hardware tools
 KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
-apt install -y linux-tools-common "linux-tools-$KVER" i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo nvme-cli
+apt install -y \
+    linux-tools-common \
+    "linux-tools-$KVER" \
+    cgroup-tools \
+    clinfo \
+    dmsetup \
+    ethtool \
+    fancontrol \
+    hdparm \
+    i2c-tools \
+    iotop \
+    lm-sensors \
+    lshw \
+    mesa-utils \
+    net-tools \
+    numactl \
+    numatop \
+    nvme-cli \
+    pciutils \
+    procps \
+    psmisc \
+    read-edid \
+    smartmontools \
+    sysstat \
+    tpm2-tools \
+    usbutils
 unset KVER
 sensors-detect --auto
 
