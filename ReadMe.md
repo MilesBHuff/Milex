@@ -62,9 +62,31 @@ Scripts that install an operating system to a ZFS root. These scripts are capabl
 #### post-installation + conversion
 
 Scripts that tailor an initial install to a specific machine and use-case. At present, there are three:
-* Aetherius, my NAS + home server. (Proxmox)
-* Duat + Anubis, my firewall + edge router. (OPNsense virtualized atop Ubuntu Server)
-* Morpheus, my AI inference box. (Ubuntu Server)
+* `configure-aetherius`: For my NAS + home server.
+    * Installs various necessary applications
+    * Installs proprietary software for applicable enterprise hardware
+    * Sets up the TRNG
+    * [WIP] Configures auto-hibernation on low-battery UPS
+    * Tweaks some settings.
+* `configure-duat`: For my edge router / firewall.
+    * Installs various necessary applications.
+    * Switches to NetworkManager.
+    * Sets up network interface passthrough.
+    * Sets up an OPNsense VM.
+    * [WIP] Configures auto-hibernation on low-battery UPS.
+    * [WIP] Configures auto-restarts (because no ECC).
+    * Tweaks some settings.
+* `configure-morpheus`: For my AI inference box.
+    * Installs various necessary applications.
+    * [WIP] installs various things necessary for running inference (including ROCm).
+    * [WIP] Configures auto-hibernation on low-battery UPS.
+    * [WIP] Configures auto-restarts (because no ECC).
+    * Tweaks some settings.
+
+#### conversion
+
+Scripts that convert Debian / Ubuntu into a derivative.
+* `convert-debian-to-proxmox`: Self-explanatory. Used on Aetherius.
 
 ### software
 
