@@ -67,6 +67,49 @@ echo ':: Declaring variables...'
 ## Misc local variables
 KERNEL_COMMANDLINE=''
 
+#######################################
+##   R E C O N F I G U R E   F S H   ##
+#######################################
+echo ':: Modifying filesystem hierarchy...'
+
+## This helps reflect dataset inheritance — filesystem `/root` lives under dataset `/home`.
+if [[ ! -L '/home/root' ]]; then
+    [[ ! -d '/root' ]] && mkdir '/root'
+    ln -sTv '/root' '/home/root'
+fi
+
+## `/var/www` needs to be moved to `/srv` so that it is treated the same as other web services.
+if [[ ! -L '/var/www' ]]; then
+    [[ ! -d '/var/www' ]] && mkdir /var/www
+    mv -f   '/var/www' '/srv/www' #FIXME: Will fail if `/srv/www` already exists; we need logic that merges the two directories.
+    ln -sTv '/srv/www' '/var/www'
+fi
+
+## Some items in `/var` need to be tied to system snapshots.
+## The criteria for inclusion is whether a rollback without the item would render the system's state inconsistent.
+VARKEEP_DIR='/varlib'
+mkdir -p "$VARKEEP_DIR"
+if [[ -d "$VARKEEP_DIR" ]]; then
+    declare -a VARKEEP_DIRS=('lib/apt' 'lib/dkms' 'lib/dpkg' 'lib/emacsen-common' 'lib/sgml-base' 'lib/ucf' 'lib/xml-core') # 'lib/apt/states' 'lib/shells'
+    for DIR in "${VARKEEP_DIRS[@]}"; do
+        if [[ ! -L "/var/$DIR" ]]; then
+            [[ ! -d "/var/$DIR" ]] && mkdir "/var/$DIR"
+            mv -f "/var/$DIR" "$VARKEEP_DIR/"
+            ln -sTv "$VARKEEP_DIR/$DIR" "/var/$DIR"
+        fi
+    done
+    declare -a VARKEEP_FILES=() #WARN: The following files' associated applications recreate them, meaning that any symlinks are be deleted and replaced: 'lib/apt/extended_states' 'lib/shells.state'
+    for FILE in "${VARKEEP_FILES[@]}"; do
+        if [[ ! -L "/var/$FILE" ]]; then
+            [[ ! -f "/var/$FILE" ]] && continue
+            install -D "/var/$FILE" "$VARKEEP_DIR/$FILE"
+            rm -f "/var/$FILE"
+            ln -sTv "$VARKEEP_DIR/$FILE" "/var/$FILE"
+        fi
+    done
+fi
+unset VARKEEP_DIR
+
 ###################################
 ##   C O N F I G U R E   A P T   ##
 ###################################
@@ -147,9 +190,9 @@ echo ':: Enabling Mandatory Access Control...'
 apt install -y apparmor apparmor-utils apparmor-notify apparmor-profiles apparmor-profiles-extra
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE apparmor=1 security=apparmor"
 
-#########################################################################
-##   I N T E R A C T I V E   S Y S T E M   C O N F I G U R A T I O N   ##
-#########################################################################
+###########################################################
+##   I N T E R A C T I V E   C O N F I G U R A T I O N   ##
+###########################################################
 
 ## Configure hostname
 echo ':: Configuring hostname...'
@@ -190,80 +233,6 @@ cp /etc/skel/. /root/
 read -rp "Please enter a username for your personal user: " USERNAME
 id "$USERNAME" >/dev/null 2>&1 || adduser "$USERNAME"
 export USERNAME
-
-###################################
-##   M E M O R Y   M O U N T S   ##
-###################################
-
-## Configure swap
-echo ':: Configuring swap...'
-## Putting live swap on ZFS is *very* fraught; don't do it!
-## Using a swap partition is a permanent loss of disk space, and there is much complexity involved because it must be encrypted — that means mdadm and LUKS beneath it.
-## Swapping to zram (a compressed RAMdisk) is by *far* the simplest solution *and* its size is dynamic according to need, but it cannot be hibernated to.
-## Hibernation support can be re-added by creating a temporary swap zvol when hibernation is requested, and removing it after resuming.
-## (In principle, because this swap zvol's size is dynamically allocated according to current memory usage, this actually gives a stronger guarantee of being able to hibernate than many fixed-size swap partitions.)
-## Because RAM is not plentiful, we want to compress swap so that we can store as much as possible; but high compression has a non-negligible cost when swapping in and out frequently.
-## zswap is an optional intermediate cache between RAM and the actual swap device, with its own compression settings.
-## When enabled, zswap contains things which were recently swapped-out, and so are most-likely to be swapped back in; while the zram then holds stuff that has been cold for a long time.
-## This situation allows us to use heavier compression for the zram for maximum swap size, without risking a corresponding performance hit during swap thrashing.
-## For zswap, then, we want to use the lightest reasonable compression algorithm.
-## The main downside is that, when things move from zswap to the zram, they must first be decompressed before being recompressed. That's not a big deal, though, since only particularly cold pages should ever make it to the zram.
-## We need to leave enough free RAM to where the system does not experience memory pressure (which becomes a serious problem around *roughly* 80% utilization).
-## 50% is about the highest reasonable for zswap + zram, since that allows 30% for normal system use when factoring that the last 20% are pressured. (Of course, the exact percents that make sense do depend somewhat on absolute system memory and idle workload.)
-## With 50% dedication, a 1:2 ratio of zswap:zram keeps us close to the default values for each. That's 16.67% for zswap, and 33.33% for the zram.
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lz4" #NOTE: Fractional percents (eg, `12.5`) are not possible.
-apt install -y systemd-zram-generator
-cat > /etc/systemd/zram-generator.conf <<'EOF'
-## zram swap
-[zram0]
-zram-size = ram / 3
-#TODO: Tune compression level.
-compression-algorithm = zstd(level=2)
-## Priority should be maxed, to help avoid slower devices becoming preferred.
-swap-priority = 32767
-
-## /tmp
-## * Vanilla tmpfs can swap (especially if it doesn't have a limit), so its stale files are *already* compressed via zswap + zram swap.
-## * Compression DRAMATICALLY slows RAM.
-## Given the above two considerations, `/tmp` on zram is quite unwise.
-
-## /run
-## This is mounted as tmpfs extremely early, before generators run; consequently, it is not possible to use zram for it (at least not in *this* way).
-
-## Example general-purpose zram device
-# [zram1]
-# zram-size = 1G
-# compression-algorithm = lz4
-# fs-type = ext4
-## Enable `metadata_csum` if you don’t trust your RAM.
-# fs-create-options = "-E lazy_itable_init=0,lazy_journal_init=0 -m0 -O none,extent,dir_index,extra_isize=256 -T small"
-## No point in `lazytime` when the filesystem is in RAM.
-# options = noatime,discard
-## Yes, this should generate and mount before anything needs it.
-# mount-point = /foo
-EOF
-# systemctl daemon-reload ## Shouldn't run from chroot.
-# systemctl start systemd-zram-setup@zram0 ## Shouldn't start/stop from chroot.
-
-## Configure `/tmp` as tmpfs
-echo ':: Configuring `/tmp`...'
-cp /usr/share/systemd/tmp.mount /etc/systemd/system/
-systemctl enable tmp.mount
-mkdir -p /etc/systemd/system/tmp.mount.d
-cat > /etc/systemd/system/tmp.mount.d/override.conf <<'EOF'
-[Mount]
-Options=mode=1777,nosuid,nodev,size=5G,noatime
-## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
-EOF
-mkdir -p /etc/systemd/system/console-setup.service.d
-cat > /etc/systemd/system/console-setup.service.d/override.conf <<'EOF' #BUG: Resolves an upstream issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
-[Unit]
-# Requires=tmp.mount
-After=tmp.mount
-EOF
-# systemctl daemon-reload ## Shouldn't run from chroot.
-## Because swap is now in memory, the kernel's usual assumption that swap is slow has been made false. We need to let the kernel know.
-idempotent_append 'vm.swappiness=134' '/etc/sysctl.d/62-io-tweakable.conf' ## This value is a preference ratio of 2:1::cache:anon, which is the inverse of the default 1:2::cache:anon ratio.
 
 ###############
 ##   Z F S   ##
@@ -761,6 +730,97 @@ sbverify --list /boot/esp/EFI/BOOT/BOOTX64.EFI
 ## Cleanup
 unset SBDIR ZBM_EFI_DIR
 
+###################################
+##   M E M O R Y   M O U N T S   ##
+###################################
+
+## Configure swap
+echo ':: Configuring swap...'
+## Putting live swap on ZFS is *very* fraught; don't do it!
+## Using a swap partition is a permanent loss of disk space, and there is much complexity involved because it must be encrypted — that means mdadm and LUKS beneath it.
+## Swapping to zram (a compressed RAMdisk) is by *far* the simplest solution *and* its size is dynamic according to need, but it cannot be hibernated to.
+## Hibernation support can be re-added by creating a temporary swap zvol when hibernation is requested, and removing it after resuming.
+## (In principle, because this swap zvol's size is dynamically allocated according to current memory usage, this actually gives a stronger guarantee of being able to hibernate than many fixed-size swap partitions.)
+## Because RAM is not plentiful, we want to compress swap so that we can store as much as possible; but high compression has a non-negligible cost when swapping in and out frequently.
+## zswap is an optional intermediate cache between RAM and the actual swap device, with its own compression settings.
+## When enabled, zswap contains things which were recently swapped-out, and so are most-likely to be swapped back in; while the zram then holds stuff that has been cold for a long time.
+## This situation allows us to use heavier compression for the zram for maximum swap size, without risking a corresponding performance hit during swap thrashing.
+## For zswap, then, we want to use the lightest reasonable compression algorithm.
+## The main downside is that, when things move from zswap to the zram, they must first be decompressed before being recompressed. That's not a big deal, though, since only particularly cold pages should ever make it to the zram.
+## We need to leave enough free RAM to where the system does not experience memory pressure (which becomes a serious problem around *roughly* 80% utilization).
+## 50% is about the highest reasonable for zswap + zram, since that allows 30% for normal system use when factoring that the last 20% are pressured. (Of course, the exact percents that make sense do depend somewhat on absolute system memory and idle workload.)
+## With 50% dedication, a 1:2 ratio of zswap:zram keeps us close to the default values for each. That's 16.67% for zswap, and 33.33% for the zram.
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lz4" #NOTE: Fractional percents (eg, `12.5`) are not possible.
+apt install -y systemd-zram-generator
+cat > /etc/systemd/zram-generator.conf <<'EOF'
+## zram swap
+[zram0]
+zram-size = ram / 3
+#TODO: Tune compression level.
+compression-algorithm = zstd(level=2)
+## Priority should be maxed, to help avoid slower devices becoming preferred.
+swap-priority = 32767
+
+## /tmp
+## * Vanilla tmpfs can swap (especially if it doesn't have a limit), so its stale files are *already* compressed via zswap + zram swap.
+## * Compression DRAMATICALLY slows RAM.
+## Given the above two considerations, `/tmp` on zram is quite unwise.
+
+## /run
+## This is mounted as tmpfs extremely early, before generators run; consequently, it is not possible to use zram for it (at least not in *this* way).
+
+## Example general-purpose zram device
+# [zram1]
+# zram-size = 1G
+# compression-algorithm = lz4
+# fs-type = ext4
+## Enable `metadata_csum` if you don’t trust your RAM.
+# fs-create-options = "-E lazy_itable_init=0,lazy_journal_init=0 -m0 -O none,extent,dir_index,extra_isize=256 -T small"
+## No point in `lazytime` when the filesystem is in RAM.
+# options = noatime,discard
+## Yes, this should generate and mount before anything needs it.
+# mount-point = /foo
+EOF
+# systemctl daemon-reload ## Shouldn't run from chroot.
+# systemctl start systemd-zram-setup@zram0 ## Shouldn't start/stop from chroot.
+
+## Configure `/tmp` as tmpfs
+echo ':: Configuring `/tmp`...'
+cp /usr/share/systemd/tmp.mount /etc/systemd/system/
+systemctl enable tmp.mount
+mkdir -p /etc/systemd/system/tmp.mount.d
+cat > /etc/systemd/system/tmp.mount.d/override.conf <<'EOF'
+[Mount]
+Options=mode=1777,nosuid,nodev,size=5G,noatime
+## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
+EOF
+mkdir -p /etc/systemd/system/console-setup.service.d
+cat > /etc/systemd/system/console-setup.service.d/override.conf <<'EOF' #BUG: Resolves an upstream issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
+[Unit]
+# Requires=tmp.mount
+After=tmp.mount
+EOF
+# systemctl daemon-reload ## Shouldn't run from chroot.
+## Because swap is now in memory, the kernel's usual assumption that swap is slow has been made false. We need to let the kernel know.
+idempotent_append 'vm.swappiness=134' '/etc/sysctl.d/62-io-tweakable.conf' ## This value is a preference ratio of 2:1::cache:anon, which is the inverse of the default 1:2::cache:anon ratio.
+
+###############################
+##   H I B E R N A T I O N   ##
+###############################
+
+#TODO: Enable hibernation
+##
+## Right before hibernation happens, we create a new sparse zvol with compression enabled. It always has the same name/path.
+## We then format it as a sparse swap partition equal to total RAM. It always has the same UUID.
+## We set its priority to the absolute minimum (-1) so that no live data is ever sent there.
+## Then we hibernate to it.
+##
+## initramfs needs to be told to unhibernate from this zvol swap. This must happen immediately after it unlocks the pool(s).
+## After the system is fully restored, we delete the zvol.
+## We also delete the zvol on normal boots (and log a warning), just in case anything ever goes wrong and a dead zvol swap is ever somehow left behind.
+
+#TODO: Enable automatic hibernation when NUT detects that the UPS is low on battery.
+
 #########################
 ##   P A C K A G E S   ##
 #########################
@@ -802,29 +862,6 @@ apt install -y cups rsync
 ## Niche applications
 # apt install -y # sanoid
 
-#################
-##   T I M E   ##
-#################
-
-#TODO: Configure Chrony
-
-###############################
-##   H I B E R N A T I O N   ##
-###############################
-
-#TODO: Enable hibernation
-##
-## Right before hibernation happens, we create a new sparse zvol with compression enabled. It always has the same name/path.
-## We then format it as a sparse swap partition equal to total RAM. It always has the same UUID.
-## We set its priority to the absolute minimum (-1) so that no live data is ever sent there.
-## Then we hibernate to it.
-##
-## initramfs needs to be told to unhibernate from this zvol swap. This must happen immediately after it unlocks the pool(s).
-## After the system is fully restored, we delete the zvol.
-## We also delete the zvol on normal boots (and log a warning), just in case anything ever goes wrong and a dead zvol swap is ever somehow left behind.
-
-#TODO: Enable automatic hibernation when NUT detects that the UPS is low on battery.
-
 #############################
 ##   N E T W O R K I N G   ##
 #############################
@@ -864,6 +901,12 @@ SUBSYSTEM=="rfkill", ATTR{type}=="wlan", ACTION=="add|change", RUN+="/usr/sbin/r
 EOF
 fi; unset DO_IT
 
+#################
+##   T I M E   ##
+#################
+
+#TODO: Configure Chrony
+
 #######################
 ##   T H E M I N G   ##
 #######################
@@ -889,75 +932,6 @@ fi; unset DO_IT
 # cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenBold"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
 # cd "$CWD"
 # unset FILE
-
-#######################################
-##   R E C O N F I G U R E   F S H   ##
-#######################################
-echo ':: Modifying filesystem hierarchy...'
-
-## `/var/www` needs to be moved to `/srv` so that it is treated the same as other web services.
-if [[ ! -L '/var/www' ]]; then
-    [[ ! -d '/var/www' ]] && mkdir /var/www
-    mv -f   '/var/www' '/srv/www' #FIXME: Will fail if `/srv/www` already exists; we need logic that merges the two directories.
-    ln -sTv '/srv/www' '/var/www'
-fi
-
-## This helps reflect dataset inheritance.
-if [[ ! -L '/home/root' ]]; then
-    ln -sTv '/root' '/home/root'
-fi
-
-## Some items in `/var` need to be tied to system snapshots.
-## The criteria for inclusion is whether a rollback without the item would render the system's state inconsistent.
-VARKEEP_DIR='/varlib'
-mkdir -p "$VARKEEP_DIR"
-if [[ -d "$VARKEEP_DIR" ]]; then
-    declare -a VARKEEP_DIRS=('lib/apt' 'lib/dkms' 'lib/dpkg' 'lib/emacsen-common' 'lib/sgml-base' 'lib/ucf' 'lib/xml-core') # 'lib/apt/states' 'lib/shells'
-    for DIR in "${VARKEEP_DIRS[@]}"; do
-        if [[ ! -L "/var/$DIR" ]]; then
-            [[ ! -d "/var/$DIR" ]] && mkdir "/var/$DIR"
-            mv -f "/var/$DIR" "$VARKEEP_DIR/"
-            ln -sTv "$VARKEEP_DIR/$DIR" "/var/$DIR"
-        fi
-    done
-    declare -a VARKEEP_FILES=() #WARN: The following files' associated applications recreate them, meaning that any symlinks are be deleted and replaced: 'lib/apt/extended_states' 'lib/shells.state'
-    for FILE in "${VARKEEP_FILES[@]}"; do
-        if [[ ! -L "/var/$FILE" ]]; then
-            [[ ! -f "/var/$FILE" ]] && continue
-            install -D "/var/$FILE" "$VARKEEP_DIR/$FILE"
-            rm -f "/var/$FILE"
-            ln -sTv "$VARKEEP_DIR/$FILE" "/var/$FILE"
-        fi
-    done
-fi
-unset VARKEEP_DIR
-
-###################
-##   S I Z E S   ##
-###################
-
-## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
-echo ':: Tweaking various compression settings...'
-FILE='/etc/initramfs-tools/initramfs.conf'
-cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -r 's/^# (COMPRESS_LEVEL)=.*/\1=0/' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
-mv -f "$FILE.new" "$FILE"
-for FILE in /etc/logrotate.conf /etc/logrotate.d/*; do
-    if grep -Eq '(^|[^#y])compress' "$FILE"; then
-        cat "$FILE" | sed -r 's/(^|[^#y])(compress)/\1#\2/' > "$FILE.new"
-        mv "$FILE.new" "$FILE"
-    fi
-done
-unset FILE
-
-## Limit log size
-echo ':: Limiting log sizes...'
-mkdir -p /etc/systemd/journald.conf.d
-cat > /etc/systemd/journald.conf.d/max-size.conf <<'EOF'
-[Journal]
-Storage=persistent
-SystemMaxUse=256M
-RuntimeMaxUse=128M
-EOF
 
 #######################################
 ##   T T Y   A S S I G N M E N T S   ##
@@ -1006,6 +980,33 @@ EOF
 # systemctl daemon-reload ## Shouldn't run from chroot.
 
 ## The idea is that VMs' serial consoles can own all TTYs higher than 10.
+
+###################
+##   S I Z E S   ##
+###################
+
+## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
+echo ':: Tweaking various compression settings...'
+FILE='/etc/initramfs-tools/initramfs.conf'
+cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -r 's/^# (COMPRESS_LEVEL)=.*/\1=0/' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
+mv -f "$FILE.new" "$FILE"
+for FILE in /etc/logrotate.conf /etc/logrotate.d/*; do
+    if grep -Eq '(^|[^#y])compress' "$FILE"; then
+        cat "$FILE" | sed -r 's/(^|[^#y])(compress)/\1#\2/' > "$FILE.new"
+        mv "$FILE.new" "$FILE"
+    fi
+done
+unset FILE
+
+## Limit log size
+echo ':: Limiting log sizes...'
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/max-size.conf <<'EOF'
+[Journal]
+Storage=persistent
+SystemMaxUse=256M
+RuntimeMaxUse=128M
+EOF
 
 #########################################################
 ##   A D D I T I O N A L   C O N F I G U R A T I O N   ##
