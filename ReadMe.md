@@ -14,7 +14,7 @@ Repo meta. Of particular note are the two environment files:
 
 ### settings
 Scripts that apply settings.
-* `tune-io`: This script can be run manually or via udev rule. It helps ensure that various settings, mainly queue depth, is set optimally per the characteristics of each disk, and in consideration of the ZFS configuration.
+* `tune-io`: This script can be run manually or via udev rule. It helps ensure that various settings, mainly queue depth, are set optimally per the characteristics of each disk, and in consideration of the ZFS configuration.
 * `tune-zfs`: This script is run manually, and generates a `/etc/modprobe.d/zfs-customized.conf` file with settings optimized for the system's ZFS setup.
 
 ### setup
