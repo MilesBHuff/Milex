@@ -70,7 +70,18 @@ KERNEL_COMMANDLINE=''
 ##   M O D U L E S   ##
 #######################
 
-source ./modules/*/* #TODO: Make it possible to specify what parts of the scipt to run.
+for MODULE in $(/usr/bin/ls -1 ./modules/*/*); do
+    echo '________________________________________________________________________________'
+    DISPLAY="${MODULE#./modules/}"
+    DISPLAY="${DISPLAY%.bash}"
+    DISPLAY="${DISPLAY//[0-9]-/}"
+    while true; do
+        read -rp "Would you like to run this module?: \`$DISPLAY\` (y/n) " ANSWER
+        [[ "$ANSWER" == 'y' || "$ANSWER" == 'n' ]] && break
+    done
+    unset DISPLAY
+    [[ $ANSWER == 'y' ]] && source "$MODULE"
+done
 
 ###################
 ##   O U T R O   ##
