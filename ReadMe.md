@@ -1,5 +1,9 @@
-# Miles's Homelab Configs & Scripts
-This repo contains scripts, configurations, etc that pertain to my homelab.
+# Milex — a `.deb` distro spin
+This repo contains a series of scripts that install Debian/Ubuntu and configure it to meet my needs. The divergence is so great that this constitutes a custom spin of those distros, one I am terming "Milex".
+Why go to such lengths? Well, a number of core reasons:
+* Ubuntu and multiple Debian derivatives have first-class in-the-kernel ZFS support, and nothing else does. I want Linux and I want ZFS; this effectively pigeonholes me here.
+* The stock distros do not have an even remotely acceptable boot-chain — they are convoluted, inelegant, and insecure. Yet, there is no reason for them to be: ZFSBootMenu allows encrypted root-on-ZFS (`/boot` included), UEFI allows exclusively using your own custom keys instead of Microsoft's, and TPM auto-unlocking exists and can be used if appropriate. I must say: it is ridiculous that I have to go to such manual lengths to get a reasonably secured boot process.
+* A setup that is not scripted is a setup that is not documented or reproducible. There are so many things that need configuring when you are earnestly setting up a ZFS-based system that it would be foolish to proceed without scripting it.
 
 ## Directories
 
@@ -9,7 +13,7 @@ Scripts that apply settings.
 * `tune-zfs`: This script is run manually, and generates a `/etc/modprobe.d/zfs-customized.conf` file with settings optimized for the system's ZFS setup.
 
 ### setup
-Scripts that set up a computer. They diverge so much from base Debian/Ubuntu/Proxmox that they might as well constitute a "Milex" spin of `.deb` distros.
+Scripts that set up a computer, run from that computer interactively and in-person.
 
 #### firmware
 Scripts that configure firmware. There are presently two:
