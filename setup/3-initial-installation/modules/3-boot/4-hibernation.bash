@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 ##
+## **Requirements:**
+## > You must be on a kernel that supports zswap, zram swap, and backing devices for zram swaps.
+## > You must have swap and zram swap enabled.
+## > You must be using encrypted ZFS for your operating system's root.
+##
 ## **Overview:**
 ## > Hibernation is a useful but universally overlooked feature in the server space.
 ## > In the event of a prolonged power-outage, a system connected to a UPS can hibernate instead of powering off.
@@ -15,28 +20,28 @@
 ##
 ## **Hibernation:**
 ## > Trigger `sync` (to free up dirty write caches), then drop unneeded caches (`vm.drop_caches=3`), then wait 5 seconds (an arbitrary figure; heuristically set to be coincident with `vm.dirty_writeback_centisecs`).
-## > Create a new sparse zvol named "hibervol", with snapshots disabled and compression enabled (using the same algorithm as zram swap: zstd-2). It should be equal to the size of zram swap + zswap + used RAM.
-## > Format hibervol as swap with name "hiberswap" and priority `-1`. (the lowest possible)
-## > Swapon hiberswap, then disable systemd-oomd, then swapoff zram swap, then disable zswap.
-## > * If free RAM is limited, this will temporarily cause a substantial drop in performance as the kernel moves things from zram swap to hiberswap. Expect lockups and potentially thrashing if zram swap is substantial.
-## > * If memory pressure is sufficiently severe, an OOM killer could be engaged. It's imperative that we avoid that eventuality. We can disable systemd's, but we can't disable the kernel's.
+## > Create a new sparse zvol named "hibervol", with snapshots disabled and compression enabled. It should be equal to the size of zram swap + zswap + used RAM.
+## > * The compression algorithm should be the same algorithm used by your zram swap (zstd-2 if using the other Zebiantu scripts)
+## > * Compression should not be enabled in Linux 7.0, since there zram no longer decompresses when flushing to a backing device.
+## > Format hibervol as swap with name "hiberswap", then set zram swap's priority to `-` (the lowest), then set hiberswap's priority to `32767` (the highest).
+## > Swapon hiberswap, set hiberswap as zram swap's backing device, then make zram swap flush everything to its backing device, then swapoff zram swap, then disable zswap.
 ## > Compact memory (`vm.compact_memory=1`), then disable compression on hibervol, then `zpool sync`, then initiate hibernation.
 ## > * The kernel has its own compression algorithm for hibernation; ergo, ZFS compression should be disabled, lest we double-compress.
+## >   * In Linux 7.0, there will be no need to disable compression, as it will already be disabled.
 ## > * Memory compaction is optional, but it may result in a higher compression ratio; and, in any case, it will help with performance after resume.
 ##
 ## **Restoration:**
 ## > initramfs unlocks the pool.
 ## > initramfs looks for the presence of hibervol.
-## > If hibervol is not present, initramfs loads the system normally.
-## > If hibervol is present, initramfs resumes from it.
-## > If an error is encountered, the system attempts
-## > After restoration: enable zswap, then swapon zram swap, then swapoff hiberswap.
-## > After swapoff finishes: enable systemd-oomd, then delete hibervol.
-##
-## **Failsafe:**
-## > We check for the existence of the hibervol on normal boots.
-## > If found, we delete it and log a warning.
-## > This helps ensure clean operation even in the event that something ever goes wrong with hibernation.
+## > If hibervol is not present, the system boots normally.
+## > If hibervol is present and invalid, the system logs an error, deletes the hibervol, and then boots normally.
+## > If hibervol is present and valid, initramfs resumes from it.
+## > If an error is encountered during resume, the system logs an error, deletes the hibervol, and reboots.
+## > After restoration: enable zswap, then swapon zram swap, then set zram swap priority back to `32767` (the highest), then remove zram swap's backing device, then disable systemd-oomd, then swapoff hiberswap.
+## > * If free RAM is limited, this will temporarily cause a substantial drop in performance as the kernel moves things out of hiberswap. Expect lockups and potentially thrashing if hiberswap holds a lot of pages.
+## > * If memory pressure is sufficiently severe, an OOM killer could be engaged. It's imperative that we avoid that eventuality. We can disable systemd's, but we can't disable the kernel's.
+## >   * However, because swapping to an in-memory device is so extremely fast, I'm optimistic that there will be no issues.
+## > After swapoff finishes: enable systemd-oomd, then delete hibervol, then compact memory (`vm.compact_memory=1`).
 ##
 ## **Contingency:**
 ## > Set a hard quota on the OS zpool equal to the total amount of installed RAM.
