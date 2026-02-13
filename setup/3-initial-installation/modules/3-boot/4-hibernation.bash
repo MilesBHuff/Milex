@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ##
 ## **Requirements:**
-## You must be on a kernel that supports zswap, zram swap, and backing devices for zram swaps.
+## You must be on a kernel that supports zswap, zram swap, and zram writeback.
 ## You must have swap and zram swap enabled.
 ## You must be using encrypted ZFS for your operating system's root.
 ##
@@ -21,10 +21,11 @@
 ## **Hibernation:**
 ## Trigger `sync` (to free up dirty write caches), then drop unneeded caches (`vm.drop_caches=3`), then wait 5 seconds (an arbitrary figure; heuristically set to be coincident with `vm.dirty_writeback_centisecs`).
 ## Create a new sparse zvol named "hibervol", with snapshots disabled and compression enabled. It should be equal to the size of zram swap + zswap + used RAM.
-## * The compression algorithm should be the same algorithm used by your zram swap (zstd-2 if using the other Zebiantu scripts)
-## * Compression should not be enabled in Linux 7.0, since there zram no longer decompresses when flushing to a backing device.
+## * zram, when flushing to writeback, decompresses its pages. So in order for our size plans to hold, we have to recompress this data in ZFS with the same compression algorithm we gave to zram swap: zstd-2.
+##   * zram zstd-2 and zfs zstd-2 aren't the same version of zstd, so their sizes won't be identical; but they'll be close-enough, which is all that matters for estimation.
+## * Compression should not be enabled in Linux 7.0, since there zram no longer decompresses when flushing to a writeback device.
 ## Format hibervol as swap with name "hiberswap", then set zram swap's priority to `-` (the lowest), then set hiberswap's priority to `32767` (the highest).
-## Swapon hiberswap, set hiberswap as zram swap's backing device, then make zram swap flush everything to its backing device, then swapoff zram swap, then disable zswap.
+## Swapon hiberswap, set hiberswap as zram swap's writeback device, then make zram swap flush everything to its writeback device, then swapoff zram swap.
 ## Compact memory (`vm.compact_memory=1`), then disable compression on hibervol, then `zpool sync`, then initiate hibernation.
 ## * The kernel has its own compression algorithm for hibernation; ergo, ZFS compression should be disabled, lest we double-compress.
 ##   * In Linux 7.0, there will be no need to disable compression, as it will already be disabled.
@@ -37,7 +38,7 @@
 ## If hibervol is present and invalid, the system logs an error, deletes the hibervol, and then boots normally.
 ## If hibervol is present and valid, initramfs resumes from it.
 ## If an error is encountered during resume, the system logs an error, deletes the hibervol, and reboots.
-## After restoration: enable zswap, then swapon zram swap, then set zram swap priority back to `32767` (the highest), then remove zram swap's backing device, then disable systemd-oomd, then swapoff hiberswap.
+## After restoration: then swapon zram swap, then set zram swap priority back to `32767` (the highest), then remove zram swap's writeback device setting, then disable systemd-oomd, then swapoff hiberswap.
 ## * If free RAM is limited, this will temporarily cause a substantial drop in performance as the kernel moves things out of hiberswap. Expect lockups and potentially thrashing if hiberswap holds a lot of pages.
 ## * If memory pressure is sufficiently severe, an OOM killer could be engaged. It's imperative that we avoid that eventuality. We can disable systemd's, but we can't disable the kernel's.
 ##   * However, because swapping to an in-memory device is so extremely fast, I'm optimistic that there will be no issues.
