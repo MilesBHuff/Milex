@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+################################################################################
+##
+## **Blockers:**
+## ZFS currently DOES NOT SUPPORT HIBERNATION, even hibernation to swap outside of ZFS.
+## Do not hibernate until support exists!
+##
+################################################################################
 ##
 ## **Requirements:**
 ## You must be on a kernel that supports zram.
@@ -43,32 +50,31 @@
 ## * If something goes wrong and hibernation or resume fails, you have the effects of a sudden system crash.
 ## * Some applications may not handle hibernation and clock changes gracefully.
 ## * If you have a *ton* of RAM, you may not have time to hibernate before your UPS runs out of battery.
-
+##
 ################################################################################
+##
 ## **Preparation:**
 ## Set a hard quota on the OS zpool's root dataset equal to the total amount of installed RAM (as this is the largest hibervol our algorithm will create).
-#TODO
-
-################################################################################
+## Set `resume=` on the kernel commandline.
+## Enable the `resume` hook for initramfs.
+##
 ## **Hibernation:**
 ## Disable the protective quota, create a new non-sparse zvol named "hibervol" equal to the size of total RAM minus free memory, with snapshots disabled, `compression=off`, `sync=always`, `volblocksize=4K`.
 ## * The kernel has its own compression algorithm for hibernation; ergo, ZFS compression should be disabled, lest we double-compress.
 ## * zram swap, being in RAM, is automatically included as part of the hibernation image — this means we don't need to drain it before hibernation, which is a huge win: draining a large zram swap always risks triggering an OOM killer.
-## Format hibervol as swap with name "hiberswap" and set its priority to `-1` (the lowest).
+## Format hibervol as swap with swap label "hiberswap" and set its priority to `-1` (the lowest).
 ## Trigger `sync` (to free up dirty write caches), then drop unneeded caches (`vm.drop_caches=3`), then wait 5 seconds (an arbitrary figure; heuristically set to be coincident with `vm.dirty_writeback_centisecs`), then compact memory (`vm.compact_memory=1`).
 ## * Reducing the contents of RAM before hibernation makes hibernation and restore faster because less data must be written to disk.
 ## * Compacting can help with compression ratio during hibernation (thereby speeding up I/O), and it gives the system less-fragmented RAM after resume.
 ## Swapon hiberswap.
 ## Run `zpool sync`, then initiate hibernation.
-#TODO
-
-################################################################################
+##
 ## **Restoration:**
 ## initramfs unlocks the pool.
-## initramfs looks for the presence of hibervol (`resume=LABEL=hiberswap`).
-## If hibervol is not present, the system boots normally.
-## If hibervol is present and invalid, the system logs an error, deletes the hibervol, and then boots normally.
-## If hibervol is present and valid, initramfs resumes from it.
-## If an error is encountered during resume, the system logs an error, deletes the hibervol, and reboots.
+## `systemd-hibernate-generator` handles resume.
 ## After restoration: swapoff hiberswap, then delete hibervol, then re-enable the protective quota.
+##
+################################################################################
+
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE resume='/dev/zvol/$ENV_POOL_NAME_OS/hibervol'"
 #TODO

@@ -21,6 +21,7 @@ systemctl enable zfs-import-cache
 systemctl enable zfs-mount
 systemctl enable zfs-import.target
 systemctl enable zfs-zed
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zfs_force=0" ## Apparently, some implementations default this to `1`, which has been known to cause corruption. (https://github.com/openzfs/zfs/issues/12842#issuecomment-1328943097)
 
 ## Prettify zpool display
 echo ':: Prettifying zpool display...'
