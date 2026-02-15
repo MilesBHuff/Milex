@@ -18,23 +18,26 @@ echo ':: Configuring swap...'
 ## With 50% dedication, a 1:2 ratio of zswap:zram keeps us close to the default values for each. That's 16.67% for zswap, and 33.33% for the zram.
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lz4" #NOTE: Fractional percents (eg, `12.5`) are not possible.
 apt install -y systemd-zram-generator
-cat > /etc/systemd/zram-generator.conf <<'EOF'
+cat > /etc/systemd/zram-generator.conf.d/zram0 <<'EOF'
 ## zram swap
 [zram0]
+zram-fraction = 0.3333333333333333
 zram-size = ram / 3
-#TODO: Tune compression level.
+max-zram-size = none
 compression-algorithm = zstd(level=2)
-## Priority should be maxed, to help avoid slower devices becoming preferred.
 swap-priority = 32767
-
+EOF
+cat > /etc/systemd/zram-generator.conf.d/tmp <<'EOF'
 ## /tmp
 ## * Vanilla tmpfs can swap (especially if it doesn't have a limit), so its stale files are *already* compressed via zswap + zram swap.
 ## * Compression DRAMATICALLY slows RAM.
 ## Given the above two considerations, `/tmp` on zram is quite unwise.
-
+EOF
+cat > /etc/systemd/zram-generator.conf.d/run <<'EOF'
 ## /run
 ## This is mounted as tmpfs extremely early, before generators run; consequently, it is not possible to use zram for it (at least not in *this* way).
-
+EOF
+cat > /etc/systemd/zram-generator.conf.d/zram1 <<'EOF'
 ## Example general-purpose zram device
 # [zram1]
 # zram-size = 1G
